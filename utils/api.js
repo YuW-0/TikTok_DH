@@ -72,6 +72,9 @@ export default {
 	
 	// 购买额外对话次数
 	buyChatChance: (userId) => request('/payment/buy-chat-chance', 'POST', { userId, amount: 1 }),
+
+	// 看广告领取一次对话次数
+	rewardChatChanceByAd: (userId, adUnitId) => request('/ad/reward', 'POST', { userId, adUnitId, scene: 'chat_quota' }),
 	
 	// 获取聊天记录
 	getChatHistory: (userId) => request(`/chat/history/${userId}`, 'GET')

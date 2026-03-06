@@ -64,6 +64,7 @@
 
 <script>
 	import api from '@/utils/api.js';
+	import { showRewardedVideoAd, getRewardedAdUnitId } from '@/utils/ad.js';
 
 	export default {
 		data() {
@@ -170,9 +171,9 @@
 			showQuotaModal(type) {
 				const content = type === 'free' 
 					? '缘分已尽，若欲再续前缘，需结善缘。' 
-					: '天机不可过多泄露，若强求机缘，需以此物易之。';
+					: '天机不可过多泄露，若强求机缘，可观天幕续缘一次。';
 					
-				const confirmText = type === 'free' ? '结善缘 (充值会员)' : '易机缘 (1元/次)';
+				const confirmText = type === 'free' ? '结善缘 (充值会员)' : '观天幕续缘';
 				
 				this.modalType = type;
 				this.modalContent = content;
@@ -194,8 +195,38 @@
 						}
 					});
 				} else {
-					this.buyExtraChance();
+					this.watchAdForExtraChance();
 				}
+			},
+			watchAdForExtraChance() {
+				const userId = this.userInfo ? this.userInfo.id : '';
+				if (!userId) return;
+
+				uni.showLoading({ title: '请稍候...' });
+				showRewardedVideoAd().then((completed) => {
+					if (!completed) {
+						uni.hideLoading();
+						uni.showToast({ title: '未看完广告，未获得机缘', icon: 'none' });
+						return;
+					}
+
+					api.rewardChatChanceByAd(userId, getRewardedAdUnitId()).then(() => {
+						uni.hideLoading();
+						uni.showToast({ title: '机缘已续，可继续问道', icon: 'success' });
+						this.messages.push({
+							role: 'ai',
+							content: '善信诚心可鉴，机缘已续。请重新告知您的困惑。'
+						});
+						this.scrollToBottom();
+					}).catch(() => {
+						uni.hideLoading();
+						uni.showToast({ title: '领取机缘失败，请稍后再试', icon: 'none' });
+					});
+				}).catch((err) => {
+					uni.hideLoading();
+					console.error('Rewarded ad failed:', err);
+					uni.showToast({ title: '广告暂不可用，请稍后再试', icon: 'none' });
+				});
 			},
 			buyExtraChance() {
 				const userId = this.userInfo ? this.userInfo.id : '';

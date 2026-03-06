@@ -26,6 +26,7 @@ const openai = new OpenAI({
 const TT_APPID = process.env.TT_APPID;
 const TT_APP_SECRET = process.env.TT_APP_SECRET;
 const DOUYIN_JSCODE2SESSION_URL = process.env.DOUYIN_JSCODE2SESSION_URL || 'https://developer.toutiao.com/api/apps/v2/jscode2session';
+const DOUYIN_REWARDED_AD_UNIT_ID = process.env.DOUYIN_REWARDED_AD_UNIT_ID || 'u3qf30vvzm08e9fp1e';
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -760,6 +761,66 @@ app.get('/api/chat/history/:userId', async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to fetch chat history: ' + err.message });
     }
 });
+
+  // 12. Reward by Ad (Simple anti-abuse checks)
+  app.post('/api/ad/reward', async (req, res) => {
+    const { userId, adUnitId, scene } = req.body;
+
+    if (!userId || !adUnitId || !scene) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    if (scene !== 'chat_quota') {
+      return res.status(400).json({ success: false, message: 'Unsupported reward scene' });
+    }
+
+    if (adUnitId !== DOUYIN_REWARDED_AD_UNIT_ID) {
+      return res.status(400).json({ success: false, message: 'Invalid ad unit' });
+    }
+
+    try {
+      let { data: quota, error } = await supabase
+        .from('chat_quotas')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (!quota) {
+        const { data: created, error: createError } = await supabase
+          .from('chat_quotas')
+          .insert({ user_id: userId, daily_count: 0, extra_chances: 1, last_chat_date: new Date() })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        return res.json({ success: true, message: 'Reward granted', extra_chances: created.extra_chances || 1 });
+      }
+
+      // Keep a hard cap to reduce abuse without schema changes.
+      const MAX_EXTRA_CHANCES = 20;
+      if ((quota.extra_chances || 0) >= MAX_EXTRA_CHANCES) {
+        return res.status(403).json({ success: false, message: 'Extra chances limit reached', code: 'AD_REWARD_LIMIT_REACHED' });
+      }
+
+      const { data: updated, error: updateError } = await supabase
+        .from('chat_quotas')
+        .update({
+          extra_chances: (quota.extra_chances || 0) + 1
+        })
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      res.json({ success: true, message: 'Reward granted', extra_chances: updated.extra_chances || 0 });
+    } catch (err) {
+      console.error('Ad reward error:', err);
+      res.status(500).json({ success: false, message: 'Failed to grant reward' });
+    }
+  });
 
 // 404 Debug Handler
 app.use((req, res, next) => {
