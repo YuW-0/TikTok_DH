@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# build outputs
+unpackage/
+dist/
+
+# env and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# editor/system
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# deployment local artifacts
+.vercel/

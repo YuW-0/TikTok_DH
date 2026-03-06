@@ -1,0 +1,97 @@
+{
+	"pages": [
+		{
+			"path": "pages/home/home",
+			"style": {
+				"navigationBarTitleText": "天天上上签"
+			}
+		},
+		{
+			"path": "pages/pk/pk",
+			"style": {
+				"navigationBarTitleText": "福运榜"
+			}
+		},
+		{
+			"path": "pages/mine/mine",
+			"style": {
+				"navigationBarTitleText": "我的"
+			}
+		},
+		{
+			"path": "pages/mine/history",
+			"style": {
+				"navigationBarTitleText": "求签历史",
+				"enablePullDownRefresh": true
+			}
+		},
+		{
+			"path": "pages/draw/draw",
+			"style": {
+				"navigationBarTitleText": "摇一摇",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/draw/ai-interpret",
+			"style": {
+				"navigationBarTitleText": "深度解签",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/muyu/muyu",
+			"style": {
+				"navigationBarTitleText": "积功德",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/pay/pay",
+			"style": {
+				"navigationBarTitleText": "支付中心",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/chat/chat",
+			"style": {
+				"navigationBarTitleText": "大师解惑",
+				"enablePullDownRefresh": false
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "每日求签",
+		"navigationBarBackgroundColor": "#DC143C",
+		"backgroundColor": "#FAF0E6"
+	},
+	"tabBar": {
+		"color": "#8B4513",
+		"selectedColor": "#DC143C",
+		"borderStyle": "black",
+		"backgroundColor": "#FAF0E6",
+		"list": [
+			{
+				"pagePath": "pages/home/home",
+				"text": "求签",
+				"iconPath": "static/drawlots_unselected.png",
+				"selectedIconPath": "static/drawlots_selected.png"
+			},
+			{
+				"pagePath": "pages/pk/pk",
+				"text": "福运榜",
+				"iconPath": "static/fu_unselected.png",
+				"selectedIconPath": "static/fu_selected.png"
+			},
+			{
+				"pagePath": "pages/mine/mine",
+				"text": "我的",
+				"iconPath": "static/my_unselected.png",
+				"selectedIconPath": "static/my_selected.png"
+			}
+		]
+	},
+	"uniIdRouter": {}
+}

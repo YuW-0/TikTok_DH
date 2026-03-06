@@ -1,0 +1,225 @@
+<template>
+	<view class="container">
+		<view class="history-list" v-if="records.length > 0">
+			<view class="history-item" 
+				v-for="(item, index) in records" 
+				:key="index" 
+				@click="showDetail(item)"
+				:class="{ 'has-interpretation': item.ai_interpretations }"
+			>
+				<view class="item-header">
+					<text class="item-date">{{ formatDate(item.created_at) }}</text>
+					<view class="header-right">
+						<view class="interpret-tag" v-if="item.ai_interpretations">
+							<uni-icons type="vip-filled" size="12" color="#fff"></uni-icons>
+							<text>大师亲批</text>
+						</view>
+						<text class="item-theme">{{ item.theme }}</text>
+					</view>
+				</view>
+				<view class="item-content">
+					<view class="sign-info">
+						<text class="sign-level">{{ item.fortune_signs.sign_level }}</text>
+						<text class="sign-title">{{ item.fortune_signs.sign_title }}</text>
+					</view>
+					<text class="sign-text">{{ item.fortune_signs.sign_text }}</text>
+				</view>
+			</view>
+		</view>
+		<view class="empty-state" v-else>
+			<uni-icons type="calendar" size="60" color="#D2B48C"></uni-icons>
+			<text class="empty-text">暂无求签记录</text>
+		</view>
+
+		<!-- 签文详情弹窗 -->
+		<sign-result ref="signResult" :sign="currentSign" :isVip="isVip"></sign-result>
+	</view>
+</template>
+
+<script>
+	import api from '@/utils/api.js';
+	import SignResult from '@/components/sign-result/sign-result.vue';
+
+	export default {
+		components: {
+			SignResult
+		},
+		data() {
+			return {
+				records: [],
+				currentSign: {},
+				isVip: false
+			}
+		},
+		onShow() {
+			this.loadHistory();
+			const vipStatus = uni.getStorageSync('isVip');
+			if (vipStatus) this.isVip = true;
+		},
+		onPullDownRefresh() {
+			this.loadHistory();
+		},
+		methods: {
+			loadHistory() {
+				const userInfo = uni.getStorageSync('userInfo');
+				if (!userInfo) return;
+
+				api.getFortuneHistory(userInfo.id).then(res => {
+					this.records = res.records;
+					uni.stopPullDownRefresh();
+				}).catch(err => {
+					console.error('加载历史失败', err);
+					uni.stopPullDownRefresh();
+					// 如果是 404 或数据为空，不弹窗报错
+					if (err && err.records === undefined) {
+						uni.showToast({
+							title: '加载失败',
+							icon: 'none'
+						});
+					}
+				});
+			},
+			showDetail(item) {
+				// 构造弹窗所需的数据格式
+				this.currentSign = {
+					...item.fortune_signs,
+					full_interpretation: item.fortune_signs.full_interpretation,
+					ai_interpretations: item.ai_interpretations, // 传递关联的AI解读
+					recordId: item.id // 传递记录ID
+				};
+				this.$refs.signResult.open();
+			},
+			formatDate(dateStr) {
+				const date = new Date(dateStr);
+				return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+			}
+		}
+	}
+</script>
+
+<style lang="scss">
+	.container {
+		min-height: 100vh;
+		background-color: #FAF0E6;
+		padding: 20px;
+	}
+
+	.history-item {
+		background-color: #fff;
+		border-radius: 12px;
+		padding: 15px;
+		margin-bottom: 15px;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+		border-left: 4px solid #D2B48C; // 默认普通签文颜色
+		position: relative;
+		overflow: hidden;
+		transition: all 0.3s;
+		
+		&.has-interpretation {
+			background: linear-gradient(135deg, #FFFBF0 0%, #F3E5F5 100%);
+			border-left: 4px solid #8A2BE2; // 大师解读紫色
+			box-shadow: 0 4px 15px rgba(138, 43, 226, 0.15);
+			
+			// 添加装饰性水印或纹理
+			&::before {
+				content: '大师亲批';
+				position: absolute;
+				right: -10px;
+				bottom: -10px;
+				font-size: 60px;
+				color: rgba(138, 43, 226, 0.05);
+				font-family: "LiSu", "SimSun", serif;
+				pointer-events: none;
+				transform: rotate(-15deg);
+				z-index: 0;
+			}
+		}
+	}
+
+	.item-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 10px;
+		padding-bottom: 10px;
+		border-bottom: 1px dashed #eee;
+	}
+	
+	.header-right {
+		display: flex;
+		align-items: center;
+	}
+	
+	.interpret-tag {
+		display: flex;
+		align-items: center;
+		background: linear-gradient(135deg, #8A2BE2, #4B0082);
+		padding: 2px 8px;
+		border-radius: 10px;
+		margin-right: 8px;
+		
+		text {
+			font-size: 10px;
+			color: #fff;
+			margin-left: 2px;
+		}
+	}
+
+	.item-date {
+		font-size: 12px;
+		color: #999;
+	}
+
+	.item-theme {
+		font-size: 12px;
+		color: #8B4513;
+		font-weight: bold;
+		background-color: #FFF8E1;
+		padding: 2px 8px;
+		border-radius: 10px;
+	}
+
+	.item-content {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.sign-info {
+		display: flex;
+		align-items: center;
+		margin-bottom: 5px;
+	}
+
+	.sign-level {
+		font-size: 16px;
+		font-weight: bold;
+		color: #DC143C;
+		margin-right: 10px;
+	}
+
+	.sign-title {
+		font-size: 14px;
+		color: #666;
+	}
+
+	.sign-text {
+		font-size: 14px;
+		color: #333;
+		line-height: 1.5;
+		font-family: "SimSun", serif;
+	}
+
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		margin-top: 100px;
+	}
+
+	.empty-text {
+		font-size: 14px;
+		color: #999;
+		margin-top: 10px;
+	}
+</style>
