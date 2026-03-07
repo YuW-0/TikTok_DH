@@ -112,6 +112,9 @@ export default {
 
 	// 看广告领取一次对话次数
 	rewardChatChanceByAd: (userId, adUnitId) => request('/ad/reward', 'POST', { userId, adUnitId, scene: 'chat_quota' }),
+
+	// 看广告领取一次额外求签机会
+	rewardDrawChanceByAd: (userId, adUnitId) => request('/ad/reward', 'POST', { userId, adUnitId, scene: 'draw_quota' }),
 	
 	// 获取聊天记录
 	getChatHistory: (userId) => request(`/chat/history/${userId}`, 'GET')

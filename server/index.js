@@ -817,7 +817,7 @@ app.get('/api/chat/history/:userId', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    if (scene !== 'chat_quota') {
+    if (scene !== 'chat_quota' && scene !== 'draw_quota') {
       return res.status(400).json({ success: false, message: 'Unsupported reward scene' });
     }
 
@@ -826,6 +826,30 @@ app.get('/api/chat/history/:userId', async (req, res) => {
     }
 
     try {
+      if (scene === 'draw_quota') {
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('id, daily_fortune_count')
+          .eq('id', userId)
+          .single();
+
+        if (userError || !user) {
+          return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const currentCount = Number(user.daily_fortune_count) || 0;
+        const nextCount = Math.max(0, currentCount - 1);
+
+        const { error: updateUserError } = await supabase
+          .from('users')
+          .update({ daily_fortune_count: nextCount })
+          .eq('id', userId);
+
+        if (updateUserError) throw updateUserError;
+
+        return res.json({ success: true, message: 'Draw chance granted', daily_fortune_count: nextCount });
+      }
+
       let { data: quota, error } = await supabase
         .from('chat_quotas')
         .select('*')

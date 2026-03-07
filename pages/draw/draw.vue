@@ -25,6 +25,7 @@
 
 <script>
 	import api from '@/utils/api.js';
+	import { showRewardedVideoAd, getRewardedAdUnitId } from '@/utils/ad.js';
 	import SignResult from '@/components/sign-result/sign-result.vue';
 
 	export default {
@@ -48,6 +49,57 @@
 			if (vipStatus) this.isVip = true;
 		},
 		methods: {
+			handleDrawSuccess(res) {
+				setTimeout(() => {
+					this.isShaking = false;
+					this.result = { ...res.sign, recordId: res.recordId };
+					this.$refs.signResult.open();
+				}, 500);
+			},
+			requestDraw(userId) {
+				api.drawFortune(userId, this.themeName).then((res) => {
+					this.handleDrawSuccess(res);
+				}).catch((err) => {
+					this.isShaking = false;
+					if (err && err.code === 'LIMIT_REACHED') {
+						uni.showModal({
+							title: '次数已用完',
+							content: '今日免费求签次数已用完，完整观看广告可额外求签1次。',
+							confirmText: '观看广告续签',
+							cancelText: '稍后再来',
+							success: (modalRes) => {
+								if (modalRes.confirm) {
+									this.watchAdForExtraDraw(userId);
+								}
+							}
+						});
+					} else {
+						uni.showToast({ title: '求签失败，请重试', icon: 'none' });
+					}
+				});
+			},
+			async watchAdForExtraDraw(userId) {
+				try {
+					uni.showLoading({ title: '加载广告中...' });
+					const isCompleted = await showRewardedVideoAd();
+					uni.hideLoading();
+
+					if (!isCompleted) {
+						uni.showToast({ title: '请完整观看广告', icon: 'none' });
+						return;
+					}
+
+					await api.rewardDrawChanceByAd(userId, getRewardedAdUnitId());
+					uni.showToast({ title: '机缘已续，可再求一签', icon: 'success' });
+
+					this.isShaking = true;
+					this.requestDraw(userId);
+				} catch (err) {
+					uni.hideLoading();
+					console.error('watchAdForExtraDraw failed:', err);
+					uni.showToast({ title: '续签失败，请稍后重试', icon: 'none' });
+				}
+			},
 			safeVibrateLong() {
 				try {
 					const maybePromise = uni.vibrateLong ? uni.vibrateLong() : null;
@@ -71,31 +123,8 @@
 
 				this.isShaking = true;
 				this.safeVibrateLong();
-				
-				// 调用后端API求签
-				api.drawFortune(userInfo.id, this.themeName).then(res => {
-					setTimeout(() => {
-						this.isShaking = false;
-						this.result = { ...res.sign, recordId: res.recordId };
-						this.$refs.signResult.open();
-					}, 500);
-				}).catch(err => {
-					this.isShaking = false;
-					if (err && err.code === 'LIMIT_REACHED') {
-						uni.showModal({
-							title: '次数已用完',
-							content: '普通用户每日限免费求签1次，升级VIP可享每日无限求签及更多特权。',
-							confirmText: '去升级',
-							success: (res) => {
-								if (res.confirm) {
-									this.goToVip();
-								}
-							}
-						});
-					} else {
-						uni.showToast({ title: '求签失败，请重试', icon: 'none' });
-					}
-				});
+
+				this.requestDraw(userInfo.id);
 			},
 			goToVip() {
 				uni.navigateTo({ url: '/pages/pay/pay' });

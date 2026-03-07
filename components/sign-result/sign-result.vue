@@ -9,7 +9,7 @@
 							<text class="sign-level">{{ sign.sign_level }}</text>
 							<text class="sign-title">{{ sign.sign_title }}</text>
 						</view>
-						
+
 						<view class="sign-text-vertical">
 							<text v-for="(char, index) in sign.sign_text" :key="index">{{ char }}</text>
 						</view>
@@ -20,14 +20,12 @@
 							<text class="inter-title">【解曰】</text>
 							<text class="inter-content">{{ sign.basic_interpretation }}</text>
 						</view>
-						
-						<!-- 完整解签区域 -->
+
 						<view class="full-interpretation">
 							<text class="inter-title">【深度解读】</text>
 							<text class="inter-content">{{ sign.full_interpretation }}</text>
 						</view>
-						
-						<!-- 古籍解签入口 -->
+
 						<view class="ai-section" v-if="!hasAiResult">
 							<view class="ai-divider">
 								<text>✨ 大师亲批 · 古籍精解 ✨</text>
@@ -37,19 +35,19 @@
 							</button>
 							<text class="ai-desc">填写信息后，观看广告即可解锁大师一对一深度解读</text>
 						</view>
-						
-						<!-- 大师解读结果展示 -->
+
 						<view class="ai-result-section" v-else>
 							<view class="ai-divider">
 								<text>✨ 大师亲批结果 ✨</text>
 							</view>
 							<text class="ai-result-text">{{ aiResultText }}</text>
+							<text class="result-bridge-text">天机未尽，若心中仍有疑惑，可再叩仙门请大师续断。</text>
+							<button class="ask-more-btn" @click="goToMasterConsultation">再叩仙门·续问天机</button>
 						</view>
-
 					</view>
 					<view class="scroll-bottom"></view>
 				</view>
-				
+
 				<view class="modal-actions">
 					<button class="action-btn close-btn" @click="close">关闭</button>
 					<button class="action-btn share-btn" open-type="share">分享</button>
@@ -71,9 +69,6 @@
 				type: Boolean,
 				default: false
 			}
-		},
-		data() {
-			return {}
 		},
 		computed: {
 			hasAiResult() {
@@ -106,19 +101,25 @@
 					signLevel: this.sign.sign_level,
 					signText: this.sign.sign_text,
 					theme: this.sign.theme || '综合',
-					recordId: this.sign.recordId || this.sign.id // 传递求签记录ID
+					recordId: this.sign.recordId || this.sign.id
 				};
 				const query = Object.keys(params)
-					.map(key => `${key}=${encodeURIComponent(params[key])}`)
+					.map((key) => `${key}=${encodeURIComponent(params[key])}`)
 					.join('&');
-					
+
 				this.close();
 				uni.navigateTo({
 					url: `/pages/draw/ai-interpret?${query}`
 				});
+			},
+			goToMasterConsultation() {
+				this.close();
+				uni.navigateTo({
+					url: '/pages/chat/chat'
+				});
 			}
 		}
-	}
+	};
 </script>
 
 <style lang="scss">
@@ -203,6 +204,23 @@
 		}
 	}
 
+	.result-bridge-text {
+		display: block;
+		font-size: 13px;
+		line-height: 1.7;
+		color: #5f4b8b;
+		margin-bottom: 12px;
+	}
+
+	.ask-more-btn {
+		background: linear-gradient(to right, #6a0dad, #4b0082);
+		color: #fff;
+		font-size: 14px;
+		border-radius: 22px;
+		height: 44px;
+		line-height: 44px;
+		width: 100%;
+	}
 	.divider {
 		width: 100%;
 		height: 1px;

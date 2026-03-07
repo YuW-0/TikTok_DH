@@ -47,14 +47,6 @@
 					clickable
 					@click="contactService"
 				/>
-				<uni-list-item 
-					title="设置" 
-					show-extra-icon 
-					:extra-icon="{color: '#DC143C', size: '22', type: 'gear'}" 
-					link
-					clickable
-					@click="clearData"
-				/>
 			</uni-list>
 		</view>
 		
@@ -93,8 +85,9 @@
 		},
 		methods: {
 			goToPay() {
-				uni.navigateTo({
-					url: '/pages/pay/pay'
+				uni.showToast({
+					title: '供奉香火入口暂未开放',
+					icon: 'none'
 				});
 			},
 			goToHistory() {
@@ -106,22 +99,6 @@
 				uni.showToast({
 					title: '功能开发中',
 					icon: 'none'
-				});
-			},
-			clearData() {
-				uni.showModal({
-					title: '清除数据',
-					content: '确定要清除所有本地数据（包括VIP状态）并重新演示吗？',
-					success: (res) => {
-						if (res.confirm) {
-							uni.clearStorageSync();
-							this.isVip = false;
-							uni.showToast({
-								title: '数据已清除',
-								icon: 'success'
-							});
-						}
-					}
 				});
 			}
 		}
@@ -136,7 +113,7 @@
 
 	.user-header {
 		background-color: #DC143C;
-		padding: 20px 20px 60px; // 底部留出空间给VIP卡片
+		padding: 20px 20px 60px;
 		position: relative;
 		margin-bottom: 40px;
 	}
