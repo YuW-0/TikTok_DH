@@ -33,6 +33,12 @@
 
 		<!-- 底部输入框 -->
 		<view class="input-area">
+			<view class="chat-quota-bar">
+				<view class="quota-pill">
+					<text>剩余对话次数 {{ chatRemaining }}</text>
+				</view>
+				<view class="quota-buy" @click="openPurchasePanel">购买</view>
+			</view>
 			<view class="input-wrapper">
 				<input 
 					class="input-box" 
@@ -48,17 +54,26 @@
 				</button>
 			</view>
 		</view>
-			<!-- 自定义弹窗 -->
-			<view class="custom-modal-mask" v-if="modalVisible">
-				<view class="custom-modal">
-					<view class="modal-title">无量天尊</view>
-					<view class="modal-content">{{ modalContent }}</view>
-					<view class="modal-footer">
-						<view class="modal-btn cancel" @click="closeModal">暂且作罢</view>
-						<view class="modal-btn confirm" @click="confirmModal">{{ modalConfirmText }}</view>
+
+		<view class="custom-modal-mask" v-if="purchaseVisible" @click="closePurchasePanel">
+			<view class="purchase-panel" @click.stop>
+				<view class="purchase-title">购买对话次数</view>
+				<view class="purchase-balance">{{ tokenName }}余额：{{ tokenBalance }}</view>
+				<view
+					class="purchase-item"
+					v-for="item in purchaseOptions"
+					:key="item.count"
+					@click="buyExtraChance(item.count)"
+				>
+					<view class="item-left">
+						<text class="item-count">买{{ item.count }}次</text>
+						<text class="item-cost">消耗 {{ item.cost }}{{ tokenName }}</text>
 					</view>
+					<view class="item-right">购买</view>
 				</view>
+				<view class="purchase-cancel" @click="closePurchasePanel">取消</view>
 			</view>
+		</view>
 	</view>
 </template>
 
@@ -74,13 +89,17 @@
 				scrollTop: 0,
 				userAvatar: '/static/male_Taoist.png', // 默认头像
 				userInfo: null,
-				modalVisible: false,
-				modalContent: '',
-				modalConfirmText: '',
-				modalType: '',
 				chatTokenCost: 8,
 				tokenName: '福缘珠',
-				pendingMessage: ''
+				tokenBalance: 0,
+				chatRemaining: 0,
+				purchaseVisible: false,
+				pendingMessage: '',
+				purchaseOptions: [
+					{ count: 10, cost: 80 },
+					{ count: 50, cost: 400 },
+					{ count: 100, cost: 800 }
+				]
 			}
 		},
 		onLoad() {
@@ -99,11 +118,37 @@
 			if (this.userInfo && this.userInfo.id) {
 				// 加载历史记录
 				this.loadHistory(welcomeMsg);
+				this.refreshChatAssets();
 			} else {
 				this.messages.push(welcomeMsg);
 			}
 		},
 		methods: {
+			refreshChatAssets() {
+				const userId = this.userInfo && this.userInfo.id;
+				if (!userId) return;
+
+				Promise.all([
+					api.getChatQuota(userId),
+					api.getTokenStatus(userId)
+				]).then(([quotaRes, tokenRes]) => {
+					this.chatRemaining = Number(quotaRes.totalRemaining) || 0;
+					this.chatTokenCost = Number(quotaRes.tokenCostPerChance) || this.chatTokenCost;
+					this.tokenName = String(tokenRes.tokenName || this.tokenName);
+					this.tokenBalance = Number(tokenRes.balance) || 0;
+					this.purchaseOptions = [10, 50, 100].map((count) => ({
+						count,
+						cost: count * this.chatTokenCost
+					}));
+				}).catch(() => {});
+			},
+			openPurchasePanel() {
+				this.refreshChatAssets();
+				this.purchaseVisible = true;
+			},
+			closePurchasePanel() {
+				this.purchaseVisible = false;
+			},
 			showDyToast(title, icon = 'none') {
 				if (typeof tt !== 'undefined' && tt.showToast) {
 					tt.showToast({ title, icon });
@@ -175,6 +220,7 @@
 					});
 					this.pendingMessage = '';
 					this.loading = false;
+					this.refreshChatAssets();
 					this.scrollToBottom();
 				}).catch(err => {
 					this.loading = false;
@@ -186,7 +232,7 @@
 							this.messages.pop();
 						}
 						this.inputMessage = message;
-						this.showQuotaModal(err);
+						this.openPurchasePanel();
 					} else {
 						this.messages.push({
 							role: 'ai',
@@ -196,36 +242,20 @@
 					}
 				});
 			},
-			showQuotaModal(err = {}) {
-				const cost = Number(err.cost) || this.chatTokenCost;
-				const tokenName = String(err.tokenName || this.tokenName);
-				this.chatTokenCost = cost;
-				this.tokenName = tokenName;
-
-				this.modalType = 'token';
-				this.modalContent = `今日问道次数已用完，是否消耗${cost}${tokenName}购买1次问道机会？`;
-				this.modalConfirmText = '购买1次';
-				this.modalVisible = true;
-			},
-			closeModal() {
-				this.modalVisible = false;
-			},
-			confirmModal() {
-				this.modalVisible = false;
-				if (this.modalType === 'token') {
-					this.buyExtraChance();
-				}
-			},
-			buyExtraChance() {
+			buyExtraChance(amount) {
 				const userId = this.userInfo ? this.userInfo.id : '';
 				if (!userId) return;
+				const safeAmount = Number(amount);
+				if (![10, 50, 100].includes(safeAmount)) return;
 				
 				this.showDyLoading('购买中...');
-				api.buyChatChance(userId).then(res => {
+				api.buyChatChance(userId, safeAmount).then(res => {
 					this.hideDyLoading();
+					this.purchaseVisible = false;
 					const cost = Number(res.cost) || this.chatTokenCost;
 					const tokenName = String(res.tokenName || this.tokenName);
 					this.showDyToast(`已消耗${cost}${tokenName}`);
+					this.refreshChatAssets();
 					if (this.pendingMessage) {
 						const retryMessage = this.pendingMessage;
 						this.pendingMessage = '';
@@ -244,6 +274,7 @@
 						const cost = Number(err.cost) || this.chatTokenCost;
 						const tokenName = String(err.tokenName || this.tokenName);
 						this.showDyToast(`${tokenName}不足，需${cost}${tokenName}`);
+						this.refreshChatAssets();
 						return;
 					}
 					this.showDyToast('购买失败，请稍后重试');
@@ -386,6 +417,35 @@
 		z-index: 100;
 	}
 
+	.chat-quota-bar {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 8px;
+	}
+
+	.quota-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 4px 12px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #fff1db, #ffe8bf);
+		border: 1px solid #f2c98c;
+
+		text {
+			font-size: 12px;
+			color: #8B4513;
+		}
+	}
+
+	.quota-buy {
+		font-size: 12px;
+		color: #fff;
+		background: linear-gradient(135deg, #DC143C, #B80F2D);
+		padding: 5px 12px;
+		border-radius: 999px;
+	}
+
 	.input-wrapper {
 		display: flex;
 		align-items: center;
@@ -436,55 +496,75 @@
 		z-index: 999;
 	}
 
-	.custom-modal {
-		width: 80%;
+	.purchase-panel {
+		width: 84%;
 		background-color: #fff;
-		border-radius: 12px;
+		border-radius: 14px;
 		overflow: hidden;
 		animation: fadeIn 0.3s ease;
+		padding-bottom: 10px;
 	}
 
-	.modal-title {
-		padding: 20px 20px 10px;
+	.purchase-title {
+		padding: 16px 16px 6px;
 		text-align: center;
-		font-size: 18px;
+		font-size: 17px;
 		font-weight: bold;
-		color: #333;
+		color: #2f2f2f;
 	}
 
-	.modal-content {
-		padding: 0 20px 20px;
+	.purchase-balance {
+		padding: 0 16px 12px;
 		text-align: center;
-		font-size: 16px;
-		color: #666;
-		line-height: 1.5;
+		font-size: 13px;
+		color: #8B4513;
 	}
 
-	.modal-footer {
+	.purchase-item {
 		display: flex;
-		border-top: 1px solid #eee;
+		justify-content: space-between;
+		align-items: center;
+		padding: 12px 16px;
+		margin: 0 12px 8px;
+		border-radius: 10px;
+		background: #faf7f1;
+		border: 1px solid #efe2ca;
 	}
 
-	.modal-btn {
-		flex: 1;
-		height: 50px;
-		line-height: 50px;
+	.item-left {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.item-count {
+		font-size: 15px;
+		color: #222;
+		font-weight: bold;
+	}
+
+	.item-cost {
+		font-size: 12px;
+		color: #7a7a7a;
+		margin-top: 2px;
+	}
+
+	.item-right {
+		font-size: 13px;
+		color: #fff;
+		background: linear-gradient(135deg, #DC143C, #B80F2D);
+		padding: 6px 14px;
+		border-radius: 16px;
+	}
+
+	.purchase-cancel {
+		margin: 2px 12px 0;
+		height: 40px;
+		line-height: 40px;
 		text-align: center;
-		font-size: 16px;
-		
-		&.cancel {
-			color: #666;
-			border-right: 1px solid #eee;
-		}
-		
-		&.confirm {
-			color: #8A2BE2;
-			font-weight: bold;
-		}
-		
-		&:active {
-			background-color: #f9f9f9;
-		}
+		font-size: 14px;
+		color: #666;
+		background: #f2f2f2;
+		border-radius: 10px;
 	}
 	
 	@keyframes fadeIn {

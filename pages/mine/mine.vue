@@ -69,28 +69,12 @@
 					link
 				/>
 				<uni-list-item 
-					title="隐私政策" 
+					title="设置" 
 					show-extra-icon 
-					:extra-icon="{color: '#DC143C', size: '22', type: 'info'}" 
+					:extra-icon="{color: '#DC143C', size: '22', type: 'gear-filled'}" 
 					link
 					clickable
-					@click="goToPrivacy"
-				/>
-				<uni-list-item 
-					title="用户协议" 
-					show-extra-icon 
-					:extra-icon="{color: '#DC143C', size: '22', type: 'compose'}" 
-					link
-					clickable
-					@click="goToTerms"
-				/>
-				<uni-list-item 
-					title="账号注销" 
-					show-extra-icon 
-					:extra-icon="{color: '#DC143C', size: '22', type: 'trash'}" 
-					link
-					clickable
-					@click="applyDeleteAccount"
+					@click="goToSettings"
 				/>
 				<uni-list-item 
 					title="联系客服" 
@@ -346,27 +330,9 @@
 					url: '/pages/mine/history'
 				});
 			},
-			goToPrivacy() {
+			goToSettings() {
 				uni.navigateTo({
-					url: '/pages/legal/privacy'
-				});
-			},
-			goToTerms() {
-				uni.navigateTo({
-					url: '/pages/legal/terms'
-				});
-			},
-			applyDeleteAccount() {
-				uni.showModal({
-					title: '账号注销申请',
-					content: '为保障您的权益，请联系客服提交注销申请。申请通过后将清除账号及相关数据。',
-					confirmText: '联系客服',
-					cancelText: '暂不处理',
-					success: (res) => {
-						if (res.confirm) {
-							this.contactService();
-						}
-					}
+					url: '/pages/mine/settings'
 				});
 			},
 			contactService() {

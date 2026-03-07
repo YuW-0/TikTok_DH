@@ -37,6 +37,7 @@ const INVITE_BIND_REWARD_INVITEE = 10;
 const INVITE_COMMISSION_RATE = 0.2;
 const AD_TOKEN_DAILY_LIMIT = 3;
 const CHAT_TOKEN_COST = 8;
+const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 
 const todayDateStr = () => new Date().toISOString().split('T')[0];
 
@@ -605,7 +606,7 @@ app.get('/api/token/status/:userId', async (req, res) => {
   }
 
   try {
-    const { data: user, error } = await supabase
+    let { data: user, error } = await supabase
       .from('users')
       .select('id, token_balance, invite_code, invited_by, last_checkin_date, ad_token_date, ad_token_count')
       .eq('id', userId)
@@ -615,6 +616,21 @@ app.get('/api/token/status/:userId', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
     }
     if (error) throw error;
+
+    // Backfill invite code for legacy users who registered before invite_code existed.
+    if (!user.invite_code) {
+      const inviteCode = await generateUniqueInviteCode();
+      const { data: patchedUser, error: patchError } = await supabase
+        .from('users')
+        .update({ invite_code: inviteCode })
+        .eq('id', userId)
+        .select('id, token_balance, invite_code, invited_by, last_checkin_date, ad_token_date, ad_token_count')
+        .single();
+
+      if (!patchError && patchedUser) {
+        user = patchedUser;
+      }
+    }
 
     const today = todayDateStr();
     const adCountToday = user.ad_token_date === today ? (Number(user.ad_token_count) || 0) : 0;
@@ -928,6 +944,81 @@ app.post('/api/user/merit', async (req, res) => {
   }
 });
 
+// 8.5 Get Chat Quota Status
+app.get('/api/chat/quota/:userId', async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId) {
+    return res.status(400).json({ success: false, message: 'Missing userId' });
+  }
+
+  try {
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('vip_level')
+      .eq('id', userId)
+      .single();
+
+    if (userError && userError.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+    if (userError) throw userError;
+
+    const isVip = Number(user.vip_level) > 0;
+    const limit = isVip ? 4 : 2;
+    const today = todayDateStr();
+
+    let { data: quota, error: quotaError } = await supabase
+      .from('chat_quotas')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (quotaError && quotaError.code === 'PGRST116') {
+      const { data: newQuota, error: createError } = await supabase
+        .from('chat_quotas')
+        .insert({ user_id: userId, daily_count: 0, last_chat_date: today, extra_chances: 0 })
+        .select()
+        .single();
+      if (createError) throw createError;
+      quota = newQuota;
+    } else if (quotaError) {
+      throw quotaError;
+    }
+
+    if (quota.last_chat_date !== today) {
+      const { data: resetQuota, error: resetError } = await supabase
+        .from('chat_quotas')
+        .update({ daily_count: 0, last_chat_date: today })
+        .eq('user_id', userId)
+        .select()
+        .single();
+      if (!resetError && resetQuota) {
+        quota = resetQuota;
+      }
+    }
+
+    const dailyCount = Number(quota.daily_count) || 0;
+    const extraChances = Number(quota.extra_chances) || 0;
+    const dailyRemain = Math.max(0, limit - dailyCount);
+
+    return res.json({
+      success: true,
+      isVip,
+      dailyLimit: limit,
+      dailyUsed: dailyCount,
+      dailyRemain,
+      extraChances,
+      totalRemaining: dailyRemain + extraChances,
+      tokenName: TOKEN_NAME,
+      tokenCostPerChance: CHAT_TOKEN_COST,
+      purchasePackages: CHAT_PURCHASE_PACKAGES,
+    });
+  } catch (err) {
+    console.error('Get chat quota status error:', err);
+    return res.status(500).json({ success: false, message: 'Get chat quota status failed' });
+  }
+});
+
 // 9. Master Chat (Consultation)
 app.post('/api/chat/ask', async (req, res) => {
   const { userId, message, history } = req.body;
@@ -1090,7 +1181,17 @@ app.post('/api/chat/ask', async (req, res) => {
 
 // 10. Buy Extra Chat Chance
 app.post('/api/payment/buy-chat-chance', async (req, res) => {
-  const { userId } = req.body;
+  const { userId, amount } = req.body;
+
+  const safeAmount = Number(amount);
+  if (!CHAT_PURCHASE_PACKAGES.includes(safeAmount)) {
+    return res.status(400).json({
+      success: false,
+      code: 'INVALID_CHAT_PACKAGE',
+      message: 'Invalid purchase package',
+      purchasePackages: CHAT_PURCHASE_PACKAGES,
+    });
+  }
 
     try {
     const { data: user, error: userError } = await supabase
@@ -1105,18 +1206,20 @@ app.post('/api/payment/buy-chat-chance', async (req, res) => {
     if (userError) throw userError;
 
     const currentBalance = Number(user.token_balance) || 0;
-    if (currentBalance < CHAT_TOKEN_COST) {
+    const totalCost = CHAT_TOKEN_COST * safeAmount;
+    if (currentBalance < totalCost) {
       return res.status(403).json({
         success: false,
         code: 'TOKEN_INSUFFICIENT',
-        message: `${TOKEN_NAME}不足，当前需要${CHAT_TOKEN_COST}${TOKEN_NAME}`,
+        message: `${TOKEN_NAME}不足，当前需要${totalCost}${TOKEN_NAME}`,
         tokenName: TOKEN_NAME,
-        cost: CHAT_TOKEN_COST,
+        cost: totalCost,
+        amount: safeAmount,
         balance: currentBalance
       });
     }
 
-    const nextBalance = currentBalance - CHAT_TOKEN_COST;
+    const nextBalance = currentBalance - totalCost;
     const { error: tokenError } = await supabase
       .from('users')
       .update({ token_balance: nextBalance })
@@ -1134,20 +1237,21 @@ app.post('/api/payment/buy-chat-chance', async (req, res) => {
         
         if (quota) {
             await supabase.from('chat_quotas').update({ 
-                extra_chances: (quota.extra_chances || 0) + 1 
+            extra_chances: (quota.extra_chances || 0) + safeAmount 
             }).eq('user_id', userId);
         } else {
             await supabase.from('chat_quotas').insert({
                 user_id: userId,
-                extra_chances: 1
+            extra_chances: safeAmount
             });
         }
         
           res.json({
             success: true,
-            message: `已消耗${CHAT_TOKEN_COST}${TOKEN_NAME}，问道次数+1`,
+          message: `已消耗${totalCost}${TOKEN_NAME}，问道次数+${safeAmount}`,
             tokenName: TOKEN_NAME,
-            cost: CHAT_TOKEN_COST,
+          amount: safeAmount,
+          cost: totalCost,
             balance: nextBalance
           });
         

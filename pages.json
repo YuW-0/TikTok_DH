@@ -26,6 +26,13 @@
 			}
 		},
 		{
+			"path": "pages/mine/settings",
+			"style": {
+				"navigationBarTitleText": "设置",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
 			"path": "pages/draw/draw",
 			"style": {
 				"navigationBarTitleText": "摇一摇",

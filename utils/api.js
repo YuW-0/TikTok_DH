@@ -129,11 +129,14 @@ export default {
 	// 更新功德
 	updateMerit: (userId, merit) => request('/user/merit', 'POST', { userId, merit }),
 	
+	// 获取聊天次数状态
+	getChatQuota: (userId) => request(`/chat/quota/${userId}`, 'GET'),
+
 	// 大师解惑（对话）
 	chatAsk: (userId, message, history) => request('/chat/ask', 'POST', { userId, message, history }),
 	
 	// 购买额外对话次数
-	buyChatChance: (userId) => request('/payment/buy-chat-chance', 'POST', { userId, amount: 1 }),
+	buyChatChance: (userId, amount) => request('/payment/buy-chat-chance', 'POST', { userId, amount }),
 
 	// 看广告领取一次额外求签机会
 	rewardDrawChanceByAd: (userId, adUnitId) => request('/ad/reward', 'POST', { userId, adUnitId, scene: 'draw_quota' }),
