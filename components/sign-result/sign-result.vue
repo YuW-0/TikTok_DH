@@ -6,24 +6,27 @@
 					<view class="scroll-top"></view>
 					<view class="scroll-body">
 						<view class="result-header">
-							<text class="sign-level">{{ sign.sign_level }}</text>
-							<text class="sign-title">{{ sign.sign_title }}</text>
+							<text class="sign-level">{{ normalizedSign.sign_level }}</text>
+							<text class="sign-title">{{ normalizedSign.sign_title }}</text>
 						</view>
 
-						<view class="sign-text-vertical">
-							<text v-for="(char, index) in sign.sign_text" :key="index">{{ char }}</text>
+						<view class="sign-text-vertical" v-if="signTextChars.length">
+							<text class="sign-text-lines">{{ verticalSignText }}</text>
+						</view>
+						<view class="sign-text-fallback" v-else>
+							<text>{{ normalizedSign.sign_text || '签文暂缺' }}</text>
 						</view>
 
 						<view class="divider"></view>
 
 						<view class="interpretation">
 							<text class="inter-title">【解曰】</text>
-							<text class="inter-content">{{ sign.basic_interpretation }}</text>
+							<text class="inter-content">{{ normalizedSign.basic_interpretation }}</text>
 						</view>
 
 						<view class="full-interpretation">
 							<text class="inter-title">【深度解读】</text>
-							<text class="inter-content">{{ sign.full_interpretation }}</text>
+							<text class="inter-content">{{ normalizedSign.full_interpretation }}</text>
 						</view>
 
 						<view class="ai-section" v-if="!hasAiResult">
@@ -71,6 +74,41 @@
 			}
 		},
 		computed: {
+			normalizedSign() {
+				const source = this.sign || {};
+				const nested = Array.isArray(source.fortune_signs)
+					? (source.fortune_signs[0] || {})
+					: (source.fortune_signs || {});
+				const pickFirst = (...values) => {
+					for (let i = 0; i < values.length; i++) {
+						const val = values[i];
+						if (val !== undefined && val !== null && String(val).trim() !== '') {
+							return val;
+						}
+					}
+					return '';
+				};
+				return {
+					sign_title: pickFirst(source.sign_title, source.signTitle, source.title, nested.sign_title, nested.signTitle, nested.title),
+					sign_level: pickFirst(source.sign_level, source.signLevel, source.level, nested.sign_level, nested.signLevel, nested.level),
+					sign_text: pickFirst(source.sign_text, source.signText, source.text, nested.sign_text, nested.signText, nested.text),
+					basic_interpretation: pickFirst(source.basic_interpretation, source.basicInterpretation, source.interpretation, nested.basic_interpretation, nested.basicInterpretation, nested.interpretation),
+					full_interpretation: pickFirst(source.full_interpretation, source.fullInterpretation, nested.full_interpretation, nested.fullInterpretation),
+					theme: pickFirst(source.theme, nested.theme, '综合'),
+					recordId: pickFirst(source.recordId, source.id, nested.recordId, nested.id)
+				};
+			},
+			signTextChars() {
+				const raw = this.normalizedSign.sign_text;
+				const text = Array.isArray(raw)
+					? raw.join('')
+					: String(raw || '').trim();
+				if (!text) return [];
+				return Array.from(text.replace(/\s+/g, ''));
+			},
+			verticalSignText() {
+				return this.signTextChars.join('\n');
+			},
 			hasAiResult() {
 				const ai = this.sign.ai_interpretations;
 				if (!ai) return false;
@@ -90,6 +128,8 @@
 		},
 		methods: {
 			open() {
+				console.log('[sign-result] open sign payload:', this.sign);
+				console.log('[sign-result] normalized sign:', this.normalizedSign);
 				this.$refs.popup.open();
 			},
 			close() {
@@ -97,11 +137,11 @@
 			},
 			goToAiInterpret() {
 				const params = {
-					signTitle: this.sign.sign_title,
-					signLevel: this.sign.sign_level,
-					signText: this.sign.sign_text,
-					theme: this.sign.theme || '综合',
-					recordId: this.sign.recordId || this.sign.id
+					signTitle: this.normalizedSign.sign_title,
+					signLevel: this.normalizedSign.sign_level,
+					signText: this.normalizedSign.sign_text,
+					theme: this.normalizedSign.theme,
+					recordId: this.normalizedSign.recordId
 				};
 				const query = Object.keys(params)
 					.map((key) => `${key}=${encodeURIComponent(params[key])}`)
@@ -194,12 +234,26 @@
 		flex-direction: column;
 		align-items: center;
 		margin-bottom: 20px;
-		
-		text {
+
+		.sign-text-lines {
 			font-size: 20px;
 			line-height: 1.5;
 			color: #333;
 			font-weight: bold;
+			font-family: "SimSun", serif;
+			white-space: pre-line;
+			text-align: center;
+		}
+	}
+
+	.sign-text-fallback {
+		width: 100%;
+		margin-bottom: 20px;
+
+		text {
+			font-size: 16px;
+			line-height: 1.7;
+			color: #333;
 			font-family: "SimSun", serif;
 		}
 	}

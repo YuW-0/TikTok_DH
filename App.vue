@@ -34,6 +34,12 @@
 					api.getUserInfo(userInfo.id).then(res => {
 						uni.setStorageSync('userInfo', res.user);
 						uni.setStorageSync('isVip', res.user.vip_level > 0);
+					}).catch((err) => {
+						const errMsg = String((err && err.errMsg) || '').toLowerCase();
+						const isAbort = errMsg.includes('abort') || err.errNo === 21101 || err.errorCode === 100022;
+						if (!isAbort) {
+							console.error('更新用户信息失败', err);
+						}
 					});
 				}
 			}

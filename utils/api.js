@@ -45,7 +45,11 @@ const request = (url, method, data = {}, options = {}) => {
 					reject(res.data);
 				},
 				fail: (err) => {
-					console.error('API Network Error:', url, err);
+					if (isAbortLikeError(err)) {
+						console.warn('API Request Aborted:', url, err);
+					} else {
+						console.error('API Network Error:', url, err);
+					}
 
 					const customBaseUrl = uni.getStorageSync('apiBaseUrl');
 
@@ -62,11 +66,12 @@ const request = (url, method, data = {}, options = {}) => {
 						return;
 					}
 
-					const toastMsg = isAbortLikeError(err) ? '请求中断，请重试' : '网络错误，请检查连接';
-					uni.showToast({
-						title: toastMsg,
-						icon: 'none'
-					});
+					if (!isAbortLikeError(err)) {
+						uni.showToast({
+							title: '网络错误，请检查连接',
+							icon: 'none'
+						});
+					}
 					reject(err);
 				}
 			});
@@ -94,6 +99,9 @@ export default {
 	
 	// 获取用户信息
 	getUserInfo: (userId) => request(`/user/${userId}`, 'GET'),
+
+	// 更新用户昵称
+	updateNickname: (userId, nickname) => request('/user/profile', 'POST', { userId, nickname }),
 	
 	// 获取求签历史
 	getFortuneHistory: (userId) => request(`/fortune/history/${userId}`, 'GET'),

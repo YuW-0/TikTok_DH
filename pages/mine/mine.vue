@@ -7,6 +7,9 @@
 				<view class="info-right">
 					<view class="name-row">
 						<text class="nickname">{{ displayName }}</text>
+						<view class="edit-name-btn" @click="openEditNickname">
+							<uni-icons type="compose" size="16" color="#fff"></uni-icons>
+						</view>
 						<view class="vip-tag" v-if="isVip">
 							<text class="vip-text">功德主</text>
 						</view>
@@ -53,15 +56,37 @@
 		<view class="version-info">
 			<text>当前版本 1.0.0</text>
 		</view>
+
+		<view class="edit-modal-mask" v-if="editModalVisible">
+			<view class="edit-modal">
+				<view class="edit-title">编辑昵称</view>
+				<input
+					class="edit-input"
+					v-model="editName"
+					maxlength="20"
+					placeholder="支持中英文/数字/下划线，最多20字"
+					placeholder-class="edit-placeholder"
+				/>
+				<view class="edit-actions">
+					<view class="edit-btn cancel" @click="closeEditModal">取消</view>
+					<view class="edit-btn confirm" @click="saveNickname">保存</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script>
+	import api from '@/utils/api.js';
+
 	export default {
 		data() {
 			return {
 				isVip: false,
-				userInfo: null
+				userInfo: null,
+				editModalVisible: false,
+				editName: '',
+				savingNickname: false
 			}
 		},
 		computed: {
@@ -69,6 +94,8 @@
 				return (this.userInfo && this.userInfo.avatar) ? this.userInfo.avatar : '/static/male_Taoist.png';
 			},
 			displayName() {
+				const nickname = this.userInfo && this.userInfo.nickname ? String(this.userInfo.nickname).trim() : '';
+				if (nickname) return nickname;
 				const id = this.userInfo && this.userInfo.id ? String(this.userInfo.id) : '';
 				if (!id) return '善信';
 				const suffix = id.length <= 5 ? id : id.slice(-5);
@@ -84,6 +111,49 @@
 			}
 		},
 		methods: {
+			openEditNickname() {
+				if (!this.userInfo || !this.userInfo.id) {
+					uni.showToast({ title: '请先登录', icon: 'none' });
+					return;
+				}
+				this.editName = this.userInfo.nickname ? String(this.userInfo.nickname) : '';
+				this.editModalVisible = true;
+			},
+			closeEditModal() {
+				if (this.savingNickname) return;
+				this.editModalVisible = false;
+			},
+			saveNickname() {
+				if (this.savingNickname) return;
+
+				const name = String(this.editName || '').trim();
+				const nicknamePattern = /^[\u4e00-\u9fa5A-Za-z0-9_]+$/;
+				if (!name) {
+					uni.showToast({ title: '昵称不能为空', icon: 'none' });
+					return;
+				}
+				if (name.length > 20) {
+					uni.showToast({ title: '昵称最多20字', icon: 'none' });
+					return;
+				}
+				if (!nicknamePattern.test(name)) {
+					uni.showToast({ title: '仅支持中英文、数字、下划线', icon: 'none' });
+					return;
+				}
+
+				this.savingNickname = true;
+				api.updateNickname(this.userInfo.id, name).then((res) => {
+					const updatedUser = { ...(this.userInfo || {}), ...(res.user || {}), nickname: name };
+					this.userInfo = updatedUser;
+					uni.setStorageSync('userInfo', updatedUser);
+					this.editModalVisible = false;
+					uni.showToast({ title: '昵称已更新', icon: 'success' });
+				}).catch(() => {
+					uni.showToast({ title: '更新失败，请重试', icon: 'none' });
+				}).finally(() => {
+					this.savingNickname = false;
+				});
+			},
 			goToPay() {
 				uni.showToast({
 					title: '供奉香火入口暂未开放',
@@ -147,6 +217,17 @@
 		font-size: 18px;
 		font-weight: bold;
 		color: #fff;
+		margin-right: 6px;
+	}
+
+	.edit-name-btn {
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 12px;
+		background-color: rgba(255, 255, 255, 0.2);
 		margin-right: 10px;
 	}
 
@@ -229,5 +310,71 @@
 			font-size: 12px;
 			color: #999;
 		}
+	}
+
+	.edit-modal-mask {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0.45);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 999;
+	}
+
+	.edit-modal {
+		width: 300px;
+		background-color: #fff;
+		border-radius: 12px;
+		padding: 18px 16px;
+	}
+
+	.edit-title {
+		font-size: 16px;
+		font-weight: bold;
+		color: #333;
+		margin-bottom: 12px;
+		text-align: center;
+	}
+
+	.edit-input {
+		height: 40px;
+		border: 1px solid #e5e5e5;
+		border-radius: 8px;
+		padding: 0 10px;
+		font-size: 14px;
+		margin-bottom: 14px;
+	}
+
+	.edit-placeholder {
+		font-size: 13px;
+		color: #bbb;
+	}
+
+	.edit-actions {
+		display: flex;
+		justify-content: space-between;
+	}
+
+	.edit-btn {
+		width: 48%;
+		height: 36px;
+		line-height: 36px;
+		text-align: center;
+		font-size: 14px;
+		border-radius: 8px;
+	}
+
+	.edit-btn.cancel {
+		background-color: #f2f2f2;
+		color: #666;
+	}
+
+	.edit-btn.confirm {
+		background-color: #DC143C;
+		color: #fff;
 	}
 </style>

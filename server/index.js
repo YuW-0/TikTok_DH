@@ -456,6 +456,50 @@ app.get('/api/user/:id', async (req, res) => {
   }
 });
 
+// 5.1 Update User Profile
+app.post('/api/user/profile', async (req, res) => {
+  const { userId, nickname } = req.body || {};
+
+  const safeUserId = String(userId || '').trim();
+  const safeNickname = String(nickname || '').trim();
+  const nicknamePattern = /^[\u4e00-\u9fa5A-Za-z0-9_]+$/;
+
+  if (!safeUserId) {
+    return res.status(400).json({ success: false, message: 'Missing userId' });
+  }
+
+  if (!safeNickname) {
+    return res.status(400).json({ success: false, message: 'Nickname is required' });
+  }
+
+  if (safeNickname.length > 20) {
+    return res.status(400).json({ success: false, message: 'Nickname too long' });
+  }
+
+  if (!nicknamePattern.test(safeNickname)) {
+    return res.status(400).json({ success: false, message: 'Nickname contains unsupported characters' });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .update({
+        nickname: safeNickname,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', safeUserId)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, user });
+  } catch (err) {
+    console.error('Update profile error:', err);
+    res.status(500).json({ success: false, message: 'Update profile failed' });
+  }
+});
+
 // 6. Get Fortune History
 app.get('/api/fortune/history/:userId', async (req, res) => {
   const { userId } = req.params;

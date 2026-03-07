@@ -69,7 +69,7 @@
 						uni.showModal({
 							title: '次数已用完',
 							content: '今日免费求签次数已用完，完整观看广告可额外求签1次。',
-							confirmText: '观看广告续签',
+							confirmText: '看广告',
 							cancelText: '稍后再来',
 							success: (modalRes) => {
 								if (modalRes.confirm) {
@@ -105,6 +105,12 @@
 				}
 			},
 			safeVibrateLong() {
+				// ByteDance mini program may deny vibration capability by platform policy.
+				// Skip direct vibration call to avoid noisy APIScopeError logs.
+				// #ifdef MP-TOUTIAO
+				return;
+				// #endif
+
 				try {
 					const maybePromise = uni.vibrateLong ? uni.vibrateLong() : null;
 					if (maybePromise && typeof maybePromise.catch === 'function') {
