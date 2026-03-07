@@ -642,7 +642,8 @@ app.get('/api/token/status/:userId', async (req, res) => {
       inviteCode: user.invite_code || '',
       invitedBy: user.invited_by || null,
       canCheckin: user.last_checkin_date !== today,
-      adRewardRemain: Math.max(0, AD_TOKEN_DAILY_LIMIT - adCountToday)
+      adRewardRemain: Math.max(0, AD_TOKEN_DAILY_LIMIT - adCountToday),
+      rewardedAdUnitId: DOUYIN_REWARDED_AD_UNIT_ID,
     });
   } catch (err) {
     console.error('Fetch token status error:', err);

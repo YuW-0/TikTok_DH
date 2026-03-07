@@ -129,7 +129,7 @@
 
 <script>
 	import api from '@/utils/api.js';
-	import { showRewardedVideoAd, getRewardedAdUnitId } from '@/utils/ad.js';
+	import { showRewardedVideoAd, getRewardedAdUnitId, isAdUnitInvalidError } from '@/utils/ad.js';
 
 	export default {
 		data() {
@@ -145,6 +145,7 @@
 				invitedBy: null,
 				canCheckin: false,
 				adRewardRemain: 0,
+				rewardedAdUnitId: getRewardedAdUnitId(),
 				inviteModalVisible: false,
 				inviteCodeInput: '',
 				tokenLoading: false
@@ -182,6 +183,7 @@
 					this.invitedBy = res.invitedBy || null;
 					this.canCheckin = Boolean(res.canCheckin);
 					this.adRewardRemain = Number(res.adRewardRemain) || 0;
+					this.rewardedAdUnitId = String(res.rewardedAdUnitId || getRewardedAdUnitId());
 				}).catch(() => {});
 			},
 			doDailyCheckin() {
@@ -257,20 +259,24 @@
 
 				this.tokenLoading = true;
 				uni.showLoading({ title: '加载广告中...' });
-				showRewardedVideoAd().then((completed) => {
+				showRewardedVideoAd(this.rewardedAdUnitId).then((completed) => {
 					uni.hideLoading();
 					if (!completed) {
 						uni.showToast({ title: '请完整观看广告', icon: 'none' });
 						return;
 					}
-					return api.rewardTokenByAd(this.userInfo.id, getRewardedAdUnitId());
+					return api.rewardTokenByAd(this.userInfo.id, this.rewardedAdUnitId);
 				}).then((res) => {
 					if (!res) return;
 					const reward = Number(res.reward) || 0;
 					uni.showToast({ title: `获得 +${reward}${this.tokenName}`, icon: 'none' });
 					this.loadTokenStatus();
-				}).catch(() => {
+				}).catch((err) => {
 					uni.hideLoading();
+					if (isAdUnitInvalidError(err)) {
+						uni.showToast({ title: '广告位配置异常，请稍后重试', icon: 'none' });
+						return;
+					}
 					uni.showToast({ title: '领取失败，请稍后再试', icon: 'none' });
 				}).finally(() => {
 					this.tokenLoading = false;

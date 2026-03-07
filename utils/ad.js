@@ -5,26 +5,57 @@ let rewardedAd = null;
 let adEventsBound = false;
 let closeHandler = null;
 let errorHandler = null;
+let currentRewardedAdUnitId = REWARDED_AD_UNIT_ID;
 
-const getRewardedAd = () => {
+const isInvalidAdUnitError = (err = {}) => {
+	const msg = String(err.errMsg || err.message || '').toLowerCase();
+	return msg.includes('adunitid is invalid') || msg.includes('ad unit is invalid') || msg.includes('adunitid invalid');
+};
+
+const normalizeAdError = (err = {}) => {
+	if (isInvalidAdUnitError(err)) {
+		const wrapped = new Error('AD_UNIT_INVALID');
+		wrapped.code = 'AD_UNIT_INVALID';
+		wrapped.raw = err;
+		return wrapped;
+	}
+	return err || new Error('AD_PLAY_FAILED');
+};
+
+const getRewardedAd = (adUnitId = REWARDED_AD_UNIT_ID) => {
 	if (typeof tt === 'undefined' || !tt.createRewardedVideoAd) {
 		throw new Error('AD_API_UNAVAILABLE');
 	}
+	if (rewardedAd && currentRewardedAdUnitId !== adUnitId) {
+		rewardedAd = null;
+		adEventsBound = false;
+	}
 	if (rewardedAd) return rewardedAd;
-	rewardedAd = tt.createRewardedVideoAd({
-		adUnitId: REWARDED_AD_UNIT_ID
-	});
+	try {
+		rewardedAd = tt.createRewardedVideoAd({
+			adUnitId
+		});
+		currentRewardedAdUnitId = adUnitId;
+	} catch (err) {
+		throw normalizeAdError(err);
+	}
 	return rewardedAd;
 };
 
-export const showRewardedVideoAd = () => {
+export const showRewardedVideoAd = (adUnitId = REWARDED_AD_UNIT_ID) => {
 	return new Promise((resolve, reject) => {
 		if (typeof tt === 'undefined' || !tt.createRewardedVideoAd) {
 			reject(new Error('AD_API_UNAVAILABLE'));
 			return;
 		}
 
-		const ad = getRewardedAd();
+		let ad = null;
+		try {
+			ad = getRewardedAd(adUnitId);
+		} catch (err) {
+			reject(normalizeAdError(err));
+			return;
+		}
 		if (!ad) {
 			reject(new Error('AD_INSTANCE_FAILED'));
 			return;
@@ -50,7 +81,11 @@ export const showRewardedVideoAd = () => {
 		errorHandler = (err) => {
 			closeHandler = null;
 			errorHandler = null;
-			reject(err || new Error('AD_PLAY_FAILED'));
+			if (isInvalidAdUnitError(err)) {
+				rewardedAd = null;
+				adEventsBound = false;
+			}
+			reject(normalizeAdError(err));
 		};
 
 		ad.show().catch(() => {
@@ -59,13 +94,18 @@ export const showRewardedVideoAd = () => {
 				.catch((err) => {
 					closeHandler = null;
 					errorHandler = null;
-					reject(err || new Error('AD_LOAD_FAILED'));
+					if (isInvalidAdUnitError(err)) {
+						rewardedAd = null;
+						adEventsBound = false;
+					}
+					reject(normalizeAdError(err));
 				});
 		});
 	});
 };
 
 export const getRewardedAdUnitId = () => REWARDED_AD_UNIT_ID;
+export const isAdUnitInvalidError = isInvalidAdUnitError;
 
 export const showInterstitialAd = () => {
 	return new Promise((resolve, reject) => {
