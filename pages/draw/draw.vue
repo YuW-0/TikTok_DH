@@ -61,7 +61,11 @@
 					this.handleDrawSuccess(res);
 				}).catch((err) => {
 					this.isShaking = false;
-					if (err && err.code === 'LIMIT_REACHED') {
+					const errCode = err && err.code ? String(err.code) : '';
+					const errMsg = err && err.message ? String(err.message).toLowerCase() : '';
+					const isLimitReached = errCode === 'LIMIT_REACHED' || errMsg.includes('daily limit reached') || errMsg.includes('limit reached');
+
+					if (isLimitReached) {
 						uni.showModal({
 							title: '次数已用完',
 							content: '今日免费求签次数已用完，完整观看广告可额外求签1次。',

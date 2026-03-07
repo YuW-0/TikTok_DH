@@ -34,7 +34,7 @@ const request = (url, method, data = {}, options = {}) => {
 					const errorMsg = res.data.message || `请求失败(${res.statusCode})`;
 
 					// 特殊错误码不显示Toast，交由页面自行处理
-					const silentErrors = ['QUOTA_EXCEEDED', 'VIP_QUOTA_EXCEEDED'];
+					const silentErrors = ['QUOTA_EXCEEDED', 'VIP_QUOTA_EXCEEDED', 'LIMIT_REACHED', 'Daily limit reached'];
 					if (!silentErrors.includes(res.data.code) && !silentErrors.includes(res.data.message)) {
 						uni.showToast({
 							title: errorMsg,
