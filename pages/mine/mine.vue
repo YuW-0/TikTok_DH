@@ -25,6 +25,32 @@
 			</view>
 		</view>
 
+		<view class="token-panel">
+			<view class="token-header">
+				<text class="token-title">我的{{ tokenName }}</text>
+				<text class="token-balance">{{ tokenBalance }}</text>
+			</view>
+			<view class="invite-row">
+				<text class="invite-label">我的邀请码：{{ inviteCode || '生成中' }}</text>
+				<view class="invite-copy" @click="copyInviteCode">复制</view>
+			</view>
+			<view class="token-actions">
+				<view class="token-action" @click="doDailyCheckin">
+					<uni-icons type="calendar-filled" size="18" color="#8B4513"></uni-icons>
+					<text>{{ canCheckin ? '每日签到' : '今日已签' }}</text>
+				</view>
+				<view class="token-action" @click="openInviteModal">
+					<uni-icons type="paperplane-filled" size="18" color="#8B4513"></uni-icons>
+					<text>{{ invitedBy ? '已绑定上级' : '绑定邀请码' }}</text>
+				</view>
+				<view class="token-action" @click="watchAdForToken">
+					<uni-icons type="gift-filled" size="18" color="#8B4513"></uni-icons>
+					<text>看广告得{{ tokenName }}</text>
+				</view>
+			</view>
+			<text class="token-tip">邀请好友并绑定关系后，好友签到/广告奖励将为您带来少量{{ tokenName }}提成；今日广告奖励剩余 {{ adRewardRemain }} 次。</text>
+		</view>
+
 		<!-- 功能列表 -->
 		<view class="menu-list">
 			<uni-list>
@@ -97,11 +123,29 @@
 				</view>
 			</view>
 		</view>
+
+		<view class="edit-modal-mask" v-if="inviteModalVisible">
+			<view class="edit-modal">
+				<view class="edit-title">绑定邀请码</view>
+				<input
+					class="edit-input"
+					v-model="inviteCodeInput"
+					maxlength="12"
+					placeholder="请输入好友邀请码"
+					placeholder-class="edit-placeholder"
+				/>
+				<view class="edit-actions">
+					<view class="edit-btn cancel" @click="closeInviteModal">取消</view>
+					<view class="edit-btn confirm" @click="bindInviteCodeAction">绑定</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script>
 	import api from '@/utils/api.js';
+	import { showRewardedVideoAd, getRewardedAdUnitId } from '@/utils/ad.js';
 
 	export default {
 		data() {
@@ -110,7 +154,16 @@
 				userInfo: null,
 				editModalVisible: false,
 				editName: '',
-				savingNickname: false
+				savingNickname: false,
+				tokenName: '福缘珠',
+				tokenBalance: 0,
+				inviteCode: '',
+				invitedBy: null,
+				canCheckin: false,
+				adRewardRemain: 0,
+				inviteModalVisible: false,
+				inviteCodeInput: '',
+				tokenLoading: false
 			}
 		},
 		computed: {
@@ -133,8 +186,112 @@
 			if (vipStatus) {
 				this.isVip = true;
 			}
+			this.loadTokenStatus();
 		},
 		methods: {
+			loadTokenStatus() {
+				if (!this.userInfo || !this.userInfo.id) return;
+				api.getTokenStatus(this.userInfo.id).then((res) => {
+					this.tokenName = res.tokenName || '福缘珠';
+					this.tokenBalance = Number(res.balance) || 0;
+					this.inviteCode = res.inviteCode || '';
+					this.invitedBy = res.invitedBy || null;
+					this.canCheckin = Boolean(res.canCheckin);
+					this.adRewardRemain = Number(res.adRewardRemain) || 0;
+				}).catch(() => {});
+			},
+			doDailyCheckin() {
+				if (!this.userInfo || !this.userInfo.id || this.tokenLoading) return;
+				this.tokenLoading = true;
+				api.checkinToken(this.userInfo.id).then((res) => {
+					const reward = Number(res.reward) || 0;
+					uni.showToast({ title: `签到成功 +${reward}${this.tokenName}`, icon: 'none' });
+					this.loadTokenStatus();
+				}).catch((err) => {
+					if (String(err.code || '') === 'ALREADY_CHECKED_IN') {
+						uni.showToast({ title: '今日已签到', icon: 'none' });
+						return;
+					}
+					uni.showToast({ title: '签到失败，请稍后重试', icon: 'none' });
+				}).finally(() => {
+					this.tokenLoading = false;
+				});
+			},
+			copyInviteCode() {
+				if (!this.inviteCode) {
+					uni.showToast({ title: '邀请码生成中', icon: 'none' });
+					return;
+				}
+				uni.setClipboardData({
+					data: this.inviteCode,
+					success: () => {
+						uni.showToast({ title: '邀请码已复制', icon: 'none' });
+					}
+				});
+			},
+			openInviteModal() {
+				this.inviteCodeInput = '';
+				this.inviteModalVisible = true;
+			},
+			closeInviteModal() {
+				if (this.tokenLoading) return;
+				this.inviteModalVisible = false;
+			},
+			bindInviteCodeAction() {
+				if (!this.userInfo || !this.userInfo.id || this.tokenLoading) return;
+				const code = String(this.inviteCodeInput || '').trim().toUpperCase();
+				if (!code) {
+					uni.showToast({ title: '请输入邀请码', icon: 'none' });
+					return;
+				}
+				this.tokenLoading = true;
+				api.bindInviteCode(this.userInfo.id, code).then((res) => {
+					uni.showToast({ title: `绑定成功 +${res.rewardInvitee || 0}${this.tokenName}`, icon: 'none' });
+					this.inviteModalVisible = false;
+					this.loadTokenStatus();
+				}).catch((err) => {
+					const codeName = String(err.code || '');
+					if (codeName === 'INVITE_ALREADY_BOUND') {
+						uni.showToast({ title: '您已绑定过邀请码', icon: 'none' });
+					} else if (codeName === 'INVITE_CODE_INVALID') {
+						uni.showToast({ title: '邀请码无效', icon: 'none' });
+					} else if (codeName === 'INVITE_SELF_BIND') {
+						uni.showToast({ title: '不能绑定自己的邀请码', icon: 'none' });
+					} else {
+						uni.showToast({ title: '绑定失败，请稍后重试', icon: 'none' });
+					}
+				}).finally(() => {
+					this.tokenLoading = false;
+				});
+			},
+			watchAdForToken() {
+				if (!this.userInfo || !this.userInfo.id || this.tokenLoading) return;
+				if (this.adRewardRemain <= 0) {
+					uni.showToast({ title: '今日广告奖励已达上限', icon: 'none' });
+					return;
+				}
+
+				this.tokenLoading = true;
+				uni.showLoading({ title: '加载广告中...' });
+				showRewardedVideoAd().then((completed) => {
+					uni.hideLoading();
+					if (!completed) {
+						uni.showToast({ title: '请完整观看广告', icon: 'none' });
+						return;
+					}
+					return api.rewardTokenByAd(this.userInfo.id, getRewardedAdUnitId());
+				}).then((res) => {
+					if (!res) return;
+					const reward = Number(res.reward) || 0;
+					uni.showToast({ title: `获得 +${reward}${this.tokenName}`, icon: 'none' });
+					this.loadTokenStatus();
+				}).catch(() => {
+					uni.hideLoading();
+					uni.showToast({ title: '领取失败，请稍后再试', icon: 'none' });
+				}).finally(() => {
+					this.tokenLoading = false;
+				});
+			},
 			openEditNickname() {
 				if (!this.userInfo || !this.userInfo.id) {
 					uni.showToast({ title: '请先登录', icon: 'none' });
@@ -347,6 +504,87 @@
 			border-radius: 12px;
 			overflow: hidden;
 		}
+	}
+
+	.token-panel {
+		margin: 0 20px 18px;
+		background: linear-gradient(135deg, #fff9ef, #fff4dd);
+		border: 1px solid #efd8aa;
+		border-radius: 12px;
+		padding: 14px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+	}
+
+	.token-header {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		margin-bottom: 8px;
+	}
+
+	.token-title {
+		font-size: 15px;
+		font-weight: bold;
+		color: #8B4513;
+	}
+
+	.token-balance {
+		font-size: 24px;
+		font-weight: bold;
+		color: #DC143C;
+	}
+
+	.invite-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 10px;
+	}
+
+	.invite-label {
+		font-size: 12px;
+		color: #666;
+	}
+
+	.invite-copy {
+		font-size: 12px;
+		color: #8B4513;
+		padding: 3px 8px;
+		border: 1px solid #d8ba84;
+		border-radius: 10px;
+	}
+
+	.token-actions {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		margin-bottom: 8px;
+	}
+
+	.token-action {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 10px;
+		padding: 8px 4px;
+		border: 1px solid #f0ddbc;
+
+		text {
+			margin-top: 4px;
+			font-size: 11px;
+			color: #8B4513;
+			text-align: center;
+		}
+	}
+
+	.token-tip {
+		display: block;
+		font-size: 11px;
+		line-height: 1.5;
+		color: #7f7f7f;
 	}
 
 	.version-info {

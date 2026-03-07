@@ -29,6 +29,82 @@ const DOUYIN_JSCODE2SESSION_URL = process.env.DOUYIN_JSCODE2SESSION_URL || 'http
 const DOUYIN_REWARDED_AD_UNIT_ID = process.env.DOUYIN_REWARDED_AD_UNIT_ID || 'u3qf30vvzm08e9fp1e';
 const DOUYIN_INTERSTITIAL_AD_UNIT_ID = process.env.DOUYIN_INTERSTITIAL_AD_UNIT_ID || 'r4y57a3qlquw0mckgi';
 
+const TOKEN_NAME = '福缘珠';
+const CHECKIN_REWARD = 12;
+const AD_REWARD = 6;
+const INVITE_BIND_REWARD_INVITER = 20;
+const INVITE_BIND_REWARD_INVITEE = 10;
+const INVITE_COMMISSION_RATE = 0.2;
+const AD_TOKEN_DAILY_LIMIT = 3;
+const CHAT_TOKEN_COST = 8;
+
+const todayDateStr = () => new Date().toISOString().split('T')[0];
+
+const randomInviteCode = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+};
+
+const generateUniqueInviteCode = async () => {
+  for (let i = 0; i < 10; i++) {
+    const code = randomInviteCode();
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .eq('invite_code', code)
+      .maybeSingle();
+
+    if (!error && !data) return code;
+  }
+  return `${Date.now().toString(36).slice(-8).toUpperCase()}`;
+};
+
+const grantTokenWithCommission = async (userId, amount) => {
+  const safeAmount = Number(amount) || 0;
+  if (safeAmount <= 0) {
+    return { userBalance: 0, commission: 0 };
+  }
+
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('id, token_balance, invited_by')
+    .eq('id', userId)
+    .single();
+
+  if (userError || !user) throw (userError || new Error('User not found'));
+
+  const nextBalance = (Number(user.token_balance) || 0) + safeAmount;
+  const { error: updateUserError } = await supabase
+    .from('users')
+    .update({ token_balance: nextBalance })
+    .eq('id', userId);
+  if (updateUserError) throw updateUserError;
+
+  let commission = 0;
+  if (user.invited_by) {
+    commission = Math.max(1, Math.floor(safeAmount * INVITE_COMMISSION_RATE));
+    const { data: inviter, error: inviterError } = await supabase
+      .from('users')
+      .select('id, token_balance')
+      .eq('id', user.invited_by)
+      .single();
+
+    if (!inviterError && inviter) {
+      const nextInviterBalance = (Number(inviter.token_balance) || 0) + commission;
+      await supabase
+        .from('users')
+        .update({ token_balance: nextInviterBalance })
+        .eq('id', inviter.id);
+    }
+  }
+
+  return { userBalance: nextBalance, commission };
+};
+
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
@@ -96,15 +172,30 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (!user) {
+      const inviteCode = await generateUniqueInviteCode();
       // Create new user
       const { data: newUser, error: createError } = await supabase
         .from('users')
-        .insert([{ openid, nickname: '抖音用户', avatar: '/static/male_Taoist.png' }])
+        .insert([{ openid, nickname: '抖音用户', avatar: '/static/male_Taoist.png', invite_code: inviteCode }])
         .select()
         .single();
       
       if (createError) throw createError;
       user = newUser;
+    }
+
+    if (!user.invite_code) {
+      const inviteCode = await generateUniqueInviteCode();
+      const { data: patchedUser, error: patchError } = await supabase
+        .from('users')
+        .update({ invite_code: inviteCode })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (!patchError && patchedUser) {
+        user = patchedUser;
+      }
     }
 
     // Check daily fortune count reset
@@ -506,6 +597,204 @@ app.post('/api/user/profile', async (req, res) => {
   }
 });
 
+// 5.2 Token Status
+app.get('/api/token/status/:userId', async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId) {
+    return res.status(400).json({ success: false, message: 'Missing userId' });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, token_balance, invite_code, invited_by, last_checkin_date, ad_token_date, ad_token_count')
+      .eq('id', userId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+    if (error) throw error;
+
+    const today = todayDateStr();
+    const adCountToday = user.ad_token_date === today ? (Number(user.ad_token_count) || 0) : 0;
+
+    return res.json({
+      success: true,
+      tokenName: TOKEN_NAME,
+      balance: Number(user.token_balance) || 0,
+      inviteCode: user.invite_code || '',
+      invitedBy: user.invited_by || null,
+      canCheckin: user.last_checkin_date !== today,
+      adRewardRemain: Math.max(0, AD_TOKEN_DAILY_LIMIT - adCountToday)
+    });
+  } catch (err) {
+    console.error('Fetch token status error:', err);
+    return res.status(500).json({ success: false, message: 'Fetch token status failed' });
+  }
+});
+
+// 5.3 Daily Check-in Reward
+app.post('/api/token/checkin', async (req, res) => {
+  const { userId } = req.body || {};
+  const safeUserId = String(userId || '').trim();
+  if (!safeUserId) {
+    return res.status(400).json({ success: false, message: 'Missing userId' });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, last_checkin_date')
+      .eq('id', safeUserId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+    if (error) throw error;
+
+    const today = todayDateStr();
+    if (user.last_checkin_date === today) {
+      return res.status(400).json({ success: false, message: 'Already checked in today', code: 'ALREADY_CHECKED_IN' });
+    }
+
+    const { userBalance, commission } = await grantTokenWithCommission(safeUserId, CHECKIN_REWARD);
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ last_checkin_date: today })
+      .eq('id', safeUserId);
+    if (updateError) throw updateError;
+
+    return res.json({
+      success: true,
+      tokenName: TOKEN_NAME,
+      reward: CHECKIN_REWARD,
+      commission,
+      balance: userBalance
+    });
+  } catch (err) {
+    console.error('Daily check-in error:', err);
+    return res.status(500).json({ success: false, message: 'Check-in failed' });
+  }
+});
+
+// 5.4 Ad Reward Token
+app.post('/api/token/ad-reward', async (req, res) => {
+  const { userId, adUnitId } = req.body || {};
+  const safeUserId = String(userId || '').trim();
+  if (!safeUserId || !adUnitId) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+
+  if (adUnitId !== DOUYIN_REWARDED_AD_UNIT_ID) {
+    return res.status(400).json({ success: false, message: 'Invalid ad unit' });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, ad_token_date, ad_token_count')
+      .eq('id', safeUserId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+    if (error) throw error;
+
+    const today = todayDateStr();
+    const adCountToday = user.ad_token_date === today ? (Number(user.ad_token_count) || 0) : 0;
+    if (adCountToday >= AD_TOKEN_DAILY_LIMIT) {
+      return res.status(403).json({ success: false, message: 'Daily ad reward limit reached', code: 'AD_TOKEN_LIMIT_REACHED' });
+    }
+
+    const { userBalance, commission } = await grantTokenWithCommission(safeUserId, AD_REWARD);
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ ad_token_date: today, ad_token_count: adCountToday + 1 })
+      .eq('id', safeUserId);
+    if (updateError) throw updateError;
+
+    return res.json({
+      success: true,
+      tokenName: TOKEN_NAME,
+      reward: AD_REWARD,
+      commission,
+      balance: userBalance,
+      adRewardRemain: Math.max(0, AD_TOKEN_DAILY_LIMIT - (adCountToday + 1))
+    });
+  } catch (err) {
+    console.error('Ad token reward error:', err);
+    return res.status(500).json({ success: false, message: 'Ad reward failed' });
+  }
+});
+
+// 5.5 Bind Invite Relationship
+app.post('/api/token/bind-invite', async (req, res) => {
+  const { userId, inviteCode } = req.body || {};
+  const safeUserId = String(userId || '').trim();
+  const safeInviteCode = String(inviteCode || '').trim().toUpperCase();
+
+  if (!safeUserId || !safeInviteCode) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+
+  try {
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, invite_code, invited_by')
+      .eq('id', safeUserId)
+      .single();
+
+    if (userError && userError.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+    if (userError) throw userError;
+
+    if (user.invited_by) {
+      return res.status(400).json({ success: false, message: 'Invite already bound', code: 'INVITE_ALREADY_BOUND' });
+    }
+
+    if (String(user.invite_code || '').toUpperCase() === safeInviteCode) {
+      return res.status(400).json({ success: false, message: 'Cannot bind your own invite code', code: 'INVITE_SELF_BIND' });
+    }
+
+    const { data: inviter, error: inviterError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('invite_code', safeInviteCode)
+      .single();
+
+    if (inviterError && inviterError.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'Invite code invalid', code: 'INVITE_CODE_INVALID' });
+    }
+    if (inviterError) throw inviterError;
+
+    const { error: bindError } = await supabase
+      .from('users')
+      .update({ invited_by: inviter.id })
+      .eq('id', safeUserId);
+    if (bindError) throw bindError;
+
+    await grantTokenWithCommission(inviter.id, INVITE_BIND_REWARD_INVITER);
+    const { userBalance } = await grantTokenWithCommission(safeUserId, INVITE_BIND_REWARD_INVITEE);
+
+    return res.json({
+      success: true,
+      tokenName: TOKEN_NAME,
+      rewardInvitee: INVITE_BIND_REWARD_INVITEE,
+      rewardInviter: INVITE_BIND_REWARD_INVITER,
+      balance: userBalance
+    });
+  } catch (err) {
+    console.error('Bind invite error:', err);
+    return res.status(500).json({ success: false, message: 'Bind invite failed' });
+  }
+});
+
 // 6. Get Fortune History
 app.get('/api/fortune/history/:userId', async (req, res) => {
   const { userId } = req.params;
@@ -645,7 +934,7 @@ app.post('/api/chat/ask', async (req, res) => {
   
   try {
     // Check Quota
-    const { data: user, error: userError } = await supabase.from('users').select('vip_level').eq('id', userId).single();
+    const { data: user, error: userError } = await supabase.from('users').select('vip_level, token_balance').eq('id', userId).single();
     if (userError) throw userError;
     
     const isVip = user.vip_level > 0;
@@ -682,12 +971,7 @@ app.post('/api/chat/ask', async (req, res) => {
     if (dailyCount >= limit) {
         // If quota exceeded, check extra chances
         if (!quota.extra_chances || quota.extra_chances <= 0) {
-            // Only throw error if we are sure user has no extra chances and daily limit reached
-            if (isVip) {
-                throw new Error('VIP_QUOTA_EXCEEDED');
-            } else {
-                throw new Error('QUOTA_EXCEEDED');
-            }
+        throw new Error('CHAT_TOKEN_REQUIRED');
         }
     }
 
@@ -790,10 +1074,14 @@ app.post('/api/chat/ask', async (req, res) => {
 
   } catch (err) {
     console.error('Chat error:', err);
-    if (err.message === 'QUOTA_EXCEEDED') {
-        res.status(403).json({ success: false, code: 'QUOTA_EXCEEDED', message: '缘分已尽，若欲再续前缘，需结善缘。' });
-    } else if (err.message === 'VIP_QUOTA_EXCEEDED') {
-        res.status(403).json({ success: false, code: 'VIP_QUOTA_EXCEEDED', message: '天机不可过多泄露，若强求机缘，需以此物易之。' });
+    if (err.message === 'CHAT_TOKEN_REQUIRED') {
+        res.status(403).json({
+          success: false,
+          code: 'CHAT_TOKEN_REQUIRED',
+          message: `今日问道次数已用完，可使用${CHAT_TOKEN_COST}${TOKEN_NAME}购买1次问道机会。`,
+          cost: CHAT_TOKEN_COST,
+          tokenName: TOKEN_NAME,
+        });
     } else {
         res.status(500).json({ success: false, message: '大师正在打坐，请稍后再试' });
     }
@@ -802,12 +1090,39 @@ app.post('/api/chat/ask', async (req, res) => {
 
 // 10. Buy Extra Chat Chance
 app.post('/api/payment/buy-chat-chance', async (req, res) => {
-    const { userId, amount } = req.body; // amount should be 1
-    
-    // In a real app, integrate with Stripe/WeChat Pay/AliPay here
-    // For demo, we simulate a successful payment immediately
-    
+  const { userId } = req.body;
+
     try {
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, token_balance')
+      .eq('id', userId)
+      .single();
+
+    if (userError && userError.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+    if (userError) throw userError;
+
+    const currentBalance = Number(user.token_balance) || 0;
+    if (currentBalance < CHAT_TOKEN_COST) {
+      return res.status(403).json({
+        success: false,
+        code: 'TOKEN_INSUFFICIENT',
+        message: `${TOKEN_NAME}不足，当前需要${CHAT_TOKEN_COST}${TOKEN_NAME}`,
+        tokenName: TOKEN_NAME,
+        cost: CHAT_TOKEN_COST,
+        balance: currentBalance
+      });
+    }
+
+    const nextBalance = currentBalance - CHAT_TOKEN_COST;
+    const { error: tokenError } = await supabase
+      .from('users')
+      .update({ token_balance: nextBalance })
+      .eq('id', userId);
+    if (tokenError) throw tokenError;
+
         // Get current quota
         const { data: quota, error: quotaError } = await supabase
             .from('chat_quotas')
@@ -828,11 +1143,17 @@ app.post('/api/payment/buy-chat-chance', async (req, res) => {
             });
         }
         
-        res.json({ success: true, message: '善缘已结，天机可续' });
+          res.json({
+            success: true,
+            message: `已消耗${CHAT_TOKEN_COST}${TOKEN_NAME}，问道次数+1`,
+            tokenName: TOKEN_NAME,
+            cost: CHAT_TOKEN_COST,
+            balance: nextBalance
+          });
         
     } catch (err) {
-        console.error('Payment error:', err);
-        res.status(500).json({ success: false, message: '结缘失败，请稍后再试' });
+          console.error('Buy chat chance error:', err);
+          res.status(500).json({ success: false, message: '购买失败，请稍后再试' });
     }
 });
 

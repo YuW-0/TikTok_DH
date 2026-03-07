@@ -64,7 +64,6 @@
 
 <script>
 	import api from '@/utils/api.js';
-	import { showRewardedVideoAd, getRewardedAdUnitId } from '@/utils/ad.js';
 
 	export default {
 		data() {
@@ -78,7 +77,10 @@
 				modalVisible: false,
 				modalContent: '',
 				modalConfirmText: '',
-				modalType: ''
+				modalType: '',
+				chatTokenCost: 8,
+				tokenName: '福缘珠',
+				pendingMessage: ''
 			}
 		},
 		onLoad() {
@@ -171,15 +173,20 @@
 						role: 'ai',
 						content: res.response
 					});
+					this.pendingMessage = '';
 					this.loading = false;
 					this.scrollToBottom();
 				}).catch(err => {
 					this.loading = false;
-					// 处理次数限制
-					if (err.code === 'QUOTA_EXCEEDED' || err.message === 'QUOTA_EXCEEDED') {
-						this.showQuotaModal('free');
-					} else if (err.code === 'VIP_QUOTA_EXCEEDED' || err.message === 'VIP_QUOTA_EXCEEDED') {
-						this.showQuotaModal('vip');
+					// 次数不足：使用福缘珠购买问道次数
+					if (err.code === 'CHAT_TOKEN_REQUIRED') {
+						this.pendingMessage = message;
+						const last = this.messages[this.messages.length - 1];
+						if (last && last.role === 'user' && last.content === message) {
+							this.messages.pop();
+						}
+						this.inputMessage = message;
+						this.showQuotaModal(err);
 					} else {
 						this.messages.push({
 							role: 'ai',
@@ -189,16 +196,15 @@
 					}
 				});
 			},
-			showQuotaModal(type) {
-				const content = type === 'free' 
-					? '缘分已尽，若欲再续前缘，需结善缘。' 
-					: '今日问道次数已用完，若仍有疑惑，可观天幕续缘一次。';
-					
-				const confirmText = type === 'free' ? '结善缘 (充值会员)' : '观天幕续缘';
-				
-				this.modalType = type;
-				this.modalContent = content;
-				this.modalConfirmText = confirmText;
+			showQuotaModal(err = {}) {
+				const cost = Number(err.cost) || this.chatTokenCost;
+				const tokenName = String(err.tokenName || this.tokenName);
+				this.chatTokenCost = cost;
+				this.tokenName = tokenName;
+
+				this.modalType = 'token';
+				this.modalContent = `今日问道次数已用完，是否消耗${cost}${tokenName}购买1次问道机会？`;
+				this.modalConfirmText = '购买1次';
 				this.modalVisible = true;
 			},
 			closeModal() {
@@ -206,66 +212,41 @@
 			},
 			confirmModal() {
 				this.modalVisible = false;
-				if (this.modalType === 'free') {
-					console.log('Navigating to pay page...');
-					uni.navigateTo({ 
-						url: '/pages/pay/pay',
-						fail: (err) => {
-							console.error('Navigate failed:', err);
-							uni.showToast({ title: '跳转失败: ' + err.errMsg, icon: 'none' });
-						}
-					});
-				} else {
-					this.watchAdForExtraChance();
+				if (this.modalType === 'token') {
+					this.buyExtraChance();
 				}
-			},
-			watchAdForExtraChance() {
-				const userId = this.userInfo ? this.userInfo.id : '';
-				if (!userId) return;
-
-				this.showDyLoading('请稍候...');
-				showRewardedVideoAd().then((completed) => {
-					if (!completed) {
-						this.hideDyLoading();
-						this.showDyToast('未看完广告，未获得机缘');
-						return;
-					}
-
-					api.rewardChatChanceByAd(userId, getRewardedAdUnitId()).then(() => {
-						this.hideDyLoading();
-						this.showDyToast('机缘已续，可继续问道', 'success');
-						this.messages.push({
-							role: 'ai',
-							content: '善信诚心可鉴，机缘已续。请重新告知您的困惑。'
-						});
-						this.scrollToBottom();
-					}).catch(() => {
-						this.hideDyLoading();
-						this.showDyToast('领取机缘失败，请稍后再试');
-					});
-				}).catch((err) => {
-					this.hideDyLoading();
-					console.error('Rewarded ad failed:', err);
-					this.showDyToast('广告暂不可用，请稍后再试');
-				});
 			},
 			buyExtraChance() {
 				const userId = this.userInfo ? this.userInfo.id : '';
 				if (!userId) return;
 				
-				uni.showLoading({ title: '祈福中...' });
+				this.showDyLoading('购买中...');
 				api.buyChatChance(userId).then(res => {
-					uni.hideLoading();
-					uni.showToast({ title: '善缘已结', icon: 'success' });
-					// 自动重试发送上一条消息? 这里简单处理，让用户重新发送即可，或者提示用户
+					this.hideDyLoading();
+					const cost = Number(res.cost) || this.chatTokenCost;
+					const tokenName = String(res.tokenName || this.tokenName);
+					this.showDyToast(`已消耗${cost}${tokenName}`);
+					if (this.pendingMessage) {
+						const retryMessage = this.pendingMessage;
+						this.pendingMessage = '';
+						this.inputMessage = retryMessage;
+						this.sendMessage();
+						return;
+					}
 					this.messages.push({
 						role: 'ai',
-						content: '善缘已至，贫道这就为您解惑。请重新告知您的困惑。'
+						content: '次数已续，可继续问道。'
 					});
 					this.scrollToBottom();
 				}).catch(err => {
-					uni.hideLoading();
-					uni.showToast({ title: '结缘失败', icon: 'none' });
+					this.hideDyLoading();
+					if (String(err.code || '') === 'TOKEN_INSUFFICIENT') {
+						const cost = Number(err.cost) || this.chatTokenCost;
+						const tokenName = String(err.tokenName || this.tokenName);
+						this.showDyToast(`${tokenName}不足，需${cost}${tokenName}`);
+						return;
+					}
+					this.showDyToast('购买失败，请稍后重试');
 				});
 			},
 			scrollToBottom() {

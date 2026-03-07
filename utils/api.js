@@ -30,7 +30,7 @@ const request = (url, method, data = {}, options = {}) => {
 						return;
 					}
 
-					const silentErrors = ['QUOTA_EXCEEDED', 'VIP_QUOTA_EXCEEDED', 'LIMIT_REACHED', 'Daily limit reached', 'USER_NOT_FOUND', 'User not found'];
+					const silentErrors = ['QUOTA_EXCEEDED', 'VIP_QUOTA_EXCEEDED', 'LIMIT_REACHED', 'Daily limit reached', 'USER_NOT_FOUND', 'User not found', 'ALREADY_CHECKED_IN', 'INVITE_ALREADY_BOUND', 'INVITE_CODE_INVALID', 'INVITE_SELF_BIND', 'AD_TOKEN_LIMIT_REACHED', 'CHAT_TOKEN_REQUIRED', 'TOKEN_INSUFFICIENT'];
 					const isSilent = silentErrors.includes(res.data.code) || silentErrors.includes(res.data.message);
 					if (isSilent) {
 						console.warn('API Request Handled:', url, res.data);
@@ -107,6 +107,18 @@ export default {
 
 	// 更新用户昵称
 	updateNickname: (userId, nickname) => request('/user/profile', 'POST', { userId, nickname }),
+
+	// 代币状态
+	getTokenStatus: (userId) => request(`/token/status/${userId}`, 'GET'),
+
+	// 每日签到获得代币
+	checkinToken: (userId) => request('/token/checkin', 'POST', { userId }),
+
+	// 观看广告获得代币
+	rewardTokenByAd: (userId, adUnitId) => request('/token/ad-reward', 'POST', { userId, adUnitId }),
+
+	// 绑定邀请码
+	bindInviteCode: (userId, inviteCode) => request('/token/bind-invite', 'POST', { userId, inviteCode }),
 	
 	// 获取求签历史
 	getFortuneHistory: (userId) => request(`/fortune/history/${userId}`, 'GET'),
@@ -122,9 +134,6 @@ export default {
 	
 	// 购买额外对话次数
 	buyChatChance: (userId) => request('/payment/buy-chat-chance', 'POST', { userId, amount: 1 }),
-
-	// 看广告领取一次对话次数
-	rewardChatChanceByAd: (userId, adUnitId) => request('/ad/reward', 'POST', { userId, adUnitId, scene: 'chat_quota' }),
 
 	// 看广告领取一次额外求签机会
 	rewardDrawChanceByAd: (userId, adUnitId) => request('/ad/reward', 'POST', { userId, adUnitId, scene: 'draw_quota' }),

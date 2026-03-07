@@ -213,13 +213,13 @@
 
 	.scroll-guide {
 		position: absolute;
-		left: 50%;
-		bottom: 30px;
-		transform: translateX(-50%);
+		left: 8px;
+		top: 36px;
+		transform: none;
 		background-color: rgba(255, 255, 255, 0.92);
 		border: 1px solid #e8d7b6;
 		border-radius: 12px;
-		padding: 4px 10px;
+		padding: 8px 6px;
 		pointer-events: none;
 		z-index: 3;
 		animation: guideFloat 1.6s ease-in-out infinite;
@@ -227,13 +227,16 @@
 		text {
 			font-size: 11px;
 			color: #8B4513;
+			writing-mode: vertical-rl;
+			text-orientation: upright;
+			letter-spacing: 1px;
 		}
 	}
 
 	@keyframes guideFloat {
-		0% { transform: translateX(-50%) translateY(0); opacity: 0.85; }
-		50% { transform: translateX(-50%) translateY(4px); opacity: 1; }
-		100% { transform: translateX(-50%) translateY(0); opacity: 0.85; }
+		0% { transform: translateY(0); opacity: 0.85; }
+		50% { transform: translateY(4px); opacity: 1; }
+		100% { transform: translateY(0); opacity: 0.85; }
 	}
 
 	.scroll-top, .scroll-bottom {
