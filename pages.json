@@ -59,6 +59,20 @@
 				"navigationBarTitleText": "大师解惑",
 				"enablePullDownRefresh": false
 			}
+		},
+		{
+			"path": "pages/legal/privacy",
+			"style": {
+				"navigationBarTitleText": "隐私政策",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/legal/terms",
+			"style": {
+				"navigationBarTitleText": "用户协议",
+				"enablePullDownRefresh": false
+			}
 		}
 	],
 	"globalStyle": {

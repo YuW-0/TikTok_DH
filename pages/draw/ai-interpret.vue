@@ -66,6 +66,17 @@
 		</view>
 
 		<!-- 底部操作栏 -->
+		<view class="consent-bar" v-if="!showResult">
+			<label class="consent-label" @click="toggleAgree">
+				<checkbox :checked="agreePolicy" color="#8A2BE2" style="transform: scale(0.75);" />
+				<text class="consent-text">我已阅读并同意</text>
+				<text class="consent-link" @click.stop="goToPrivacy">《隐私政策》</text>
+				<text class="consent-text">与</text>
+				<text class="consent-link" @click.stop="goToTerms">《用户协议》</text>
+			</label>
+			<text class="compliance-tip">温馨提示：解读内容仅供传统文化参考，不构成医疗、法律或投资建议。</text>
+		</view>
+
 		<view class="footer-bar" v-if="!showResult">
 			<view class="price-info">
 				<text class="label">解锁方式：</text>
@@ -126,6 +137,7 @@
 				loading: false,
 				showResult: false,
 				aiResult: '',
+				agreePolicy: false,
 				pollTimer: null,
 				today: new Date().toISOString().split('T')[0]
 			}
@@ -203,11 +215,28 @@
 				this.formData.birthday = e.detail.value
 			},
 			submitForm() {
+				if (!this.agreePolicy) {
+					uni.showToast({ title: '请先同意隐私政策与用户协议', icon: 'none' });
+					return;
+				}
 				this.$refs.form.validate().then(res => {
 					this.unlockByAdThenAnalyze();
 				}).catch(err => {
 					console.log('表单校验失败', err);
 				})
+			},
+			toggleAgree() {
+				this.agreePolicy = !this.agreePolicy;
+			},
+			goToPrivacy() {
+				uni.navigateTo({
+					url: '/pages/legal/privacy'
+				});
+			},
+			goToTerms() {
+				uni.navigateTo({
+					url: '/pages/legal/terms'
+				});
 			},
 			async unlockByAdThenAnalyze() {
 				try {
@@ -437,6 +466,42 @@
 		padding: 0 20px;
 		box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
 		z-index: 100;
+	}
+
+	.consent-bar {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 62px;
+		background: rgba(255, 255, 255, 0.95);
+		padding: 6px 14px;
+		box-shadow: 0 -1px 6px rgba(0,0,0,0.04);
+		z-index: 101;
+	}
+
+	.consent-label {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.consent-text {
+		font-size: 12px;
+		color: #666;
+	}
+
+	.consent-link {
+		font-size: 12px;
+		color: #4B0082;
+		text-decoration: underline;
+	}
+
+	.compliance-tip {
+		display: block;
+		margin-top: 4px;
+		font-size: 11px;
+		color: #8a8a8a;
+		line-height: 1.4;
 	}
 
 	.price-info {

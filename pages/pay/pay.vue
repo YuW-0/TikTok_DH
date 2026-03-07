@@ -2,7 +2,10 @@
 	<view class="container">
 		<view class="pay-header">
 			<text class="header-title">香油供奉</text>
-			<text class="header-desc">广结善缘，功德无量</text>
+			<text class="header-desc">广结善缘，解锁文化内容服务</text>
+		</view>
+		<view class="compliance-notice">
+			<text>温馨提示：页面内容为传统文化服务，相关解读仅供参考，不构成医疗、法律或投资建议。</text>
 		</view>
 
 		<!-- 功德箱 -->
@@ -74,7 +77,7 @@
 					{ icon: 'gift-filled', text: '专属装扮' }
 				],
 				fortuneProducts: [
-					{ name: '财运亨通签', desc: '全方位分析您的财运走势，提供投资建议', price: '3.00', type: 'fortune_wealth' },
+					{ name: '财运亨通签', desc: '全方位分析财运走势，提供财务规划思路参考', price: '3.00', type: 'fortune_wealth' },
 					{ name: '事业腾飞签', desc: '针对创业者、生意人的专属运势指导', price: '5.00', type: 'fortune_business' },
 					{ name: '流年运势书', desc: '万字长文深度解析全年运势', price: '12.00', type: 'fortune_yearly' }
 				]
@@ -106,7 +109,7 @@
 					const updatedUserInfo = { ...userInfo, vip_level: 1 };
 					uni.setStorageSync('userInfo', updatedUserInfo);
 					
-					uni.showToast({ title: '结缘成功', icon: 'success' });
+					uni.showToast({ title: '服务已开通', icon: 'success' });
 					setTimeout(() => {
 						uni.navigateBack();
 					}, 1500);
@@ -131,7 +134,7 @@
 							
 							api.createPayment(userInfo.id, item.type, item.price).then(res => {
 								uni.hideLoading();
-								uni.showToast({ title: '祈福成功', icon: 'success' });
+								uni.showToast({ title: '内容已解锁', icon: 'success' });
 							}).catch(err => {
 								uni.hideLoading();
 								uni.showToast({ title: '支付失败', icon: 'none' });
@@ -176,6 +179,20 @@
 		margin: 20px 20px 10px;
 		padding-left: 10px;
 		border-left: 4px solid #DC143C;
+	}
+
+	.compliance-notice {
+		margin: 10px 20px 0;
+		padding: 10px 12px;
+		background-color: #fff6e8;
+		border: 1px solid #f3ddbc;
+		border-radius: 8px;
+
+		text {
+			font-size: 12px;
+			line-height: 1.5;
+			color: #8B4513;
+		}
 	}
 
 	.product-list {

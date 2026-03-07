@@ -58,6 +58,9 @@
 				<uni-icons type="arrowright" size="18" color="#fff" style="opacity: 0.8;"></uni-icons>
 			</view>
 		</view>
+		<view class="home-compliance-tip">
+			<text>温馨提示：本内容为传统文化交流参考，不构成医疗、法律或投资建议。</text>
+		</view>
 
 		<!-- 今日运势概览 -->
 		<view class="fortune-summary">
@@ -264,6 +267,22 @@
 		white-space: nowrap;
 		padding-left: 20px;
 		margin-top: 30px; // 增加按钮与标题的距离
+	}
+
+	.home-compliance-tip {
+		margin: 0 20px 10px;
+		padding: 8px 10px;
+		background-color: rgba(255, 248, 225, 0.9);
+		border: 1px solid #ecd9b5;
+		border-radius: 8px;
+		position: relative;
+		z-index: 1;
+
+		text {
+			font-size: 11px;
+			line-height: 1.5;
+			color: #8B4513;
+		}
 	}
 
 	.theme-list {

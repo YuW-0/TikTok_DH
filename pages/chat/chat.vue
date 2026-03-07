@@ -192,7 +192,7 @@
 			showQuotaModal(type) {
 				const content = type === 'free' 
 					? '缘分已尽，若欲再续前缘，需结善缘。' 
-					: '天机不可过多泄露，若强求机缘，可观天幕续缘一次。';
+					: '今日问道次数已用完，若仍有疑惑，可观天幕续缘一次。';
 					
 				const confirmText = type === 'free' ? '结善缘 (充值会员)' : '观天幕续缘';
 				
