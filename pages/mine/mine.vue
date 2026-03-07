@@ -174,6 +174,18 @@
 			this.loadTokenStatus();
 		},
 		methods: {
+			getCurrentMiniAppId() {
+				try {
+					if (typeof tt !== 'undefined' && tt.getAccountInfoSync) {
+						const info = tt.getAccountInfoSync();
+						const appId = info && info.miniProgram && info.miniProgram.appId ? String(info.miniProgram.appId).trim() : '';
+						return appId;
+					}
+				} catch (err) {
+					console.warn('getAccountInfoSync failed:', err);
+				}
+				return '';
+			},
 			loadTokenStatus() {
 				if (!this.userInfo || !this.userInfo.id) return;
 				api.getTokenStatus(this.userInfo.id).then((res) => {
@@ -183,7 +195,7 @@
 					this.invitedBy = res.invitedBy || null;
 					this.canCheckin = Boolean(res.canCheckin);
 					this.adRewardRemain = Number(res.adRewardRemain) || 0;
-					this.rewardedAdUnitId = String(res.rewardedAdUnitId || getRewardedAdUnitId());
+					this.rewardedAdUnitId = String(res.rewardedAdUnitId || getRewardedAdUnitId()).trim();
 				}).catch(() => {});
 			},
 			doDailyCheckin() {
@@ -257,6 +269,13 @@
 					return;
 				}
 
+				const runtimeAppId = this.getCurrentMiniAppId();
+				console.log('Rewarded ad diagnostic:', {
+					appId: runtimeAppId || '(empty)',
+					adUnitId: this.rewardedAdUnitId,
+					adRewardRemain: this.adRewardRemain
+				});
+
 				this.tokenLoading = true;
 				uni.showLoading({ title: '加载广告中...' });
 				showRewardedVideoAd(this.rewardedAdUnitId).then((completed) => {
@@ -274,7 +293,12 @@
 				}).catch((err) => {
 					uni.hideLoading();
 					if (isAdUnitInvalidError(err)) {
-						uni.showToast({ title: '广告位配置异常，请稍后重试', icon: 'none' });
+						console.error('Rewarded ad unit invalid:', {
+							appId: runtimeAppId || '(empty)',
+							adUnitId: this.rewardedAdUnitId,
+							err
+						});
+						uni.showToast({ title: '广告位与当前小程序不匹配', icon: 'none' });
 						return;
 					}
 					uni.showToast({ title: '领取失败，请稍后再试', icon: 'none' });

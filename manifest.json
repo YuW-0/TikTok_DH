@@ -63,6 +63,7 @@
         "usingComponents" : true
     },
     "mp-toutiao" : {
+        "appid" : "tt3efd4840a09d39a901",
         "usingComponents" : true
     },
     "uniStatistics" : {

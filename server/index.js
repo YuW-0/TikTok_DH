@@ -26,8 +26,8 @@ const openai = new OpenAI({
 const TT_APPID = process.env.TT_APPID;
 const TT_APP_SECRET = process.env.TT_APP_SECRET;
 const DOUYIN_JSCODE2SESSION_URL = process.env.DOUYIN_JSCODE2SESSION_URL || 'https://developer.toutiao.com/api/apps/v2/jscode2session';
-const DOUYIN_REWARDED_AD_UNIT_ID = process.env.DOUYIN_REWARDED_AD_UNIT_ID || 'u3qf30vvzm08e9fp1e';
-const DOUYIN_INTERSTITIAL_AD_UNIT_ID = process.env.DOUYIN_INTERSTITIAL_AD_UNIT_ID || 'r4y57a3qlquw0mckgi';
+const DOUYIN_REWARDED_AD_UNIT_ID = String(process.env.DOUYIN_REWARDED_AD_UNIT_ID || 'u3qf30vvzm08e9fp1e').trim();
+const DOUYIN_INTERSTITIAL_AD_UNIT_ID = String(process.env.DOUYIN_INTERSTITIAL_AD_UNIT_ID || 'r4y57a3qlquw0mckgi').trim();
 
 const TOKEN_NAME = '福缘珠';
 const CHECKIN_REWARD = 12;

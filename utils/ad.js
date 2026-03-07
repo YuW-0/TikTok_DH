@@ -12,6 +12,10 @@ const isInvalidAdUnitError = (err = {}) => {
 	return msg.includes('adunitid is invalid') || msg.includes('ad unit is invalid') || msg.includes('adunitid invalid');
 };
 
+const normalizeAdUnitId = (adUnitId) => String(adUnitId || '').trim();
+
+const isLikelyAdUnitId = (adUnitId) => /^[a-z0-9]{16,32}$/i.test(adUnitId);
+
 const normalizeAdError = (err = {}) => {
 	if (isInvalidAdUnitError(err)) {
 		const wrapped = new Error('AD_UNIT_INVALID');
@@ -26,16 +30,23 @@ const getRewardedAd = (adUnitId = REWARDED_AD_UNIT_ID) => {
 	if (typeof tt === 'undefined' || !tt.createRewardedVideoAd) {
 		throw new Error('AD_API_UNAVAILABLE');
 	}
-	if (rewardedAd && currentRewardedAdUnitId !== adUnitId) {
+	const normalizedAdUnitId = normalizeAdUnitId(adUnitId);
+	if (!isLikelyAdUnitId(normalizedAdUnitId)) {
+		const wrapped = new Error('AD_UNIT_INVALID');
+		wrapped.code = 'AD_UNIT_INVALID';
+		wrapped.adUnitId = normalizedAdUnitId;
+		throw wrapped;
+	}
+	if (rewardedAd && currentRewardedAdUnitId !== normalizedAdUnitId) {
 		rewardedAd = null;
 		adEventsBound = false;
 	}
 	if (rewardedAd) return rewardedAd;
 	try {
 		rewardedAd = tt.createRewardedVideoAd({
-			adUnitId
+			adUnitId: normalizedAdUnitId
 		});
-		currentRewardedAdUnitId = adUnitId;
+		currentRewardedAdUnitId = normalizedAdUnitId;
 	} catch (err) {
 		throw normalizeAdError(err);
 	}
