@@ -22,19 +22,9 @@
 						</view>
 						
 						<!-- 完整解签区域 -->
-						<view class="full-interpretation" v-if="isVip || isAdWatched">
+						<view class="full-interpretation">
 							<text class="inter-title">【深度解读】</text>
 							<text class="inter-content">{{ sign.full_interpretation }}</text>
-						</view>
-						
-						<view class="lock-area" v-else>
-							<text class="lock-hint">观看广告解锁深度解读</text>
-							<button class="ad-btn" @click="watchAd">
-								<text>📺 观看广告解锁</text>
-							</button>
-							<view class="vip-link" @click="goToVip">
-								<text>成为VIP免广告 ></text>
-							</view>
 						</view>
 						
 						<!-- 古籍解签入口 -->
@@ -43,9 +33,9 @@
 								<text>✨ 大师亲批 · 古籍精解 ✨</text>
 							</view>
 							<button class="ai-btn" @click="goToAiInterpret">
-								<text>获取大师一对一深度解读 (¥5.00)</text>
+								<text>获取大师一对一深度解读</text>
 							</button>
-							<text class="ai-desc">结合《周易》、《渊海子平》等古籍，大师为您量身批注</text>
+							<text class="ai-desc">填写信息后，观看广告即可解锁大师一对一深度解读</text>
 						</view>
 						
 						<!-- 大师解读结果展示 -->
@@ -83,9 +73,7 @@
 			}
 		},
 		data() {
-			return {
-				isAdWatched: false
-			}
+			return {}
 		},
 		computed: {
 			hasAiResult() {
@@ -107,23 +95,10 @@
 		},
 		methods: {
 			open() {
-				this.isAdWatched = false;
 				this.$refs.popup.open();
 			},
 			close() {
 				this.$refs.popup.close();
-			},
-			watchAd() {
-				uni.showLoading({ title: '加载广告中...' });
-				setTimeout(() => {
-					uni.hideLoading();
-					uni.showToast({ title: '解锁成功', icon: 'success' });
-					this.isAdWatched = true;
-				}, 1500);
-			},
-			goToVip() {
-				this.close();
-				uni.navigateTo({ url: '/pages/pay/pay' });
 			},
 			goToAiInterpret() {
 				const params = {

@@ -61,16 +61,18 @@
 			<view class="result-content">
 				<text>{{ aiResult }}</text>
 			</view>
+			<text class="result-bridge-text">天机未尽，若心中仍有疑惑，可再叩仙门请大师续断。</text>
+			<button class="ask-more-btn" @click="goToMasterConsultation">再叩仙门·续问天机</button>
 		</view>
 
 		<!-- 底部操作栏 -->
 		<view class="footer-bar" v-if="!showResult">
 			<view class="price-info">
-				<text class="label">咨询费：</text>
-				<text class="price">¥5.00</text>
+				<text class="label">解锁方式：</text>
+				<text class="price">观看广告</text>
 			</view>
 			<button class="submit-btn" @click="submitForm" :loading="loading" :disabled="loading">
-				{{ loading ? '大师正在翻阅古籍...' : '立即支付并解读' }}
+				{{ loading ? '大师正在翻阅古籍...' : '观看广告并解锁' }}
 			</button>
 		</view>
 	</view>
@@ -78,6 +80,7 @@
 
 <script>
 	import api from '@/utils/api.js';
+	import { showRewardedVideoAd } from '@/utils/ad.js';
 
 	export default {
 		data() {
@@ -123,6 +126,7 @@
 				loading: false,
 				showResult: false,
 				aiResult: '',
+				pollTimer: null,
 				today: new Date().toISOString().split('T')[0]
 			}
 		},
@@ -132,26 +136,104 @@
 			if (options.signText) this.signInfo.signText = decodeURIComponent(options.signText);
 			if (options.theme) this.signInfo.theme = decodeURIComponent(options.theme);
 			if (options.recordId) this.signInfo.recordId = options.recordId; // 确保接收 recordId
+			this.tryRestoreInterpretation();
+		},
+		onUnload() {
+			this.stopPolling();
 		},
 		methods: {
+			getPendingKey() {
+				const userInfo = uni.getStorageSync('userInfo') || {};
+				const userId = userInfo.id || 'guest';
+				const recordId = this.signInfo.recordId || 'unknown_record';
+				return `ai_interpret_pending:${userId}:${recordId}`;
+			},
+			setPending(flag) {
+				const key = this.getPendingKey();
+				if (flag) {
+					uni.setStorageSync(key, true);
+				} else {
+					uni.removeStorageSync(key);
+				}
+			},
+			isPending() {
+				return Boolean(uni.getStorageSync(this.getPendingKey()));
+			},
+			stopPolling() {
+				if (this.pollTimer) {
+					clearInterval(this.pollTimer);
+					this.pollTimer = null;
+				}
+			},
+			startPollingResult() {
+				this.stopPolling();
+				this.pollTimer = setInterval(() => {
+					this.fetchInterpretationResult(true);
+				}, 5000);
+			},
+			tryRestoreInterpretation() {
+				if (!this.signInfo.recordId) return;
+				this.fetchInterpretationResult(true);
+				if (this.isPending()) {
+					this.startPollingResult();
+				}
+			},
+			fetchInterpretationResult(silent = false) {
+				const userInfo = uni.getStorageSync('userInfo');
+				if (!userInfo || !this.signInfo.recordId) return;
+
+				api.getAiInterpretResult(userInfo.id, this.signInfo.recordId).then((res) => {
+					if (res.status === 'done' && res.data && res.data.ai_response) {
+						this.showResult = true;
+						this.loading = false;
+						this.aiResult = res.data.ai_response;
+						this.setPending(false);
+						this.stopPolling();
+						if (!silent) {
+							uni.showToast({ title: '已恢复解读结果', icon: 'none' });
+						}
+					}
+				}).catch((err) => {
+					if (!silent) {
+						console.error('fetchInterpretationResult failed:', err);
+					}
+				});
+			},
 			onBirthdayChange(e) {
 				this.formData.birthday = e.detail.value
 			},
 			submitForm() {
 				this.$refs.form.validate().then(res => {
-					// 模拟支付流程
-					uni.showModal({
-						title: '确认支付',
-						content: '支付 ¥5.00 获取大师古籍深度解读？',
-						success: (paymentRes) => {
-							if (paymentRes.confirm) {
-								this.startAiAnalysis();
-							}
-						}
-					});
+					this.unlockByAdThenAnalyze();
 				}).catch(err => {
 					console.log('表单校验失败', err);
 				})
+			},
+			async unlockByAdThenAnalyze() {
+				try {
+					uni.showLoading({ title: '加载广告中...' });
+					const isCompleted = await showRewardedVideoAd();
+					uni.hideLoading();
+
+					if (!isCompleted) {
+						uni.showToast({ title: '请完整观看广告', icon: 'none' });
+						return;
+					}
+
+					this.startAiAnalysis();
+				} catch (error) {
+					uni.hideLoading();
+					console.error('广告调用失败:', error);
+
+					let errorMsg = '广告加载失败，请稍后重试';
+					if (error && error.message === 'AD_API_UNAVAILABLE') {
+						errorMsg = '当前环境不支持广告播放';
+					} else if (error && String(error.errMsg || '').toLowerCase().includes('network')) {
+						errorMsg = '网络未连接，请检查网络设置';
+					}
+
+					uni.showToast({ title: errorMsg, icon: 'none' });
+				}
 			},
 			startAiAnalysis() {
 				const userInfo = uni.getStorageSync('userInfo');
@@ -162,12 +244,16 @@
 
 				this.loading = true;
 				this.showResult = false;
+				this.setPending(true);
+				this.startPollingResult();
 				
 				// 调用后端 AI 解读接口
 				api.aiInterpret(userInfo.id, this.signInfo, this.formData).then(res => {
 					this.loading = false;
 					this.showResult = true;
 					this.aiResult = res.data.ai_response;
+					this.setPending(false);
+					this.stopPolling();
 					
 					this.$nextTick(() => {
 						uni.pageScrollTo({
@@ -177,7 +263,19 @@
 					});
 				}).catch(err => {
 					this.loading = false;
+					const errMsg = String(err?.errMsg || '').toLowerCase();
+					if (errMsg.includes('timeout') || err.errorCode === 100020 || err.errNo === 21103) {
+						uni.showToast({ title: '解读较慢，已在后台继续，稍后可返回查看', icon: 'none' });
+						return;
+					}
+					this.setPending(false);
+					this.stopPolling();
 					uni.showToast({ title: '解读失败，请重试', icon: 'none' });
+				});
+			},
+			goToMasterConsultation() {
+				uni.navigateTo({
+					url: '/pages/chat/chat'
 				});
 			}
 		}
@@ -299,6 +397,25 @@
 			line-height: 1.8;
 			white-space: pre-wrap; // 保留换行符
 		}
+	}
+
+	.result-bridge-text {
+		display: block;
+		margin-top: 12px;
+		font-size: 13px;
+		line-height: 1.7;
+		color: #5f4b8b;
+	}
+
+	.ask-more-btn {
+		margin-top: 18px;
+		background: linear-gradient(to right, #6a0dad, #4b0082);
+		color: #fff;
+		font-size: 14px;
+		border-radius: 22px;
+		height: 44px;
+		line-height: 44px;
+		width: 100%;
 	}
 
 	.footer-bar {

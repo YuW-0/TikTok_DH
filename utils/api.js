@@ -1,23 +1,38 @@
 const CLOUD_BASE_URL = 'https://1ls09us5f17oi-env-ucta8euk6e.service.douyincloud.run/api';
-const BASE_URL = uni.getStorageSync('apiBaseUrl') || CLOUD_BASE_URL;
 
-const request = (url, method, data = {}) => {
+const getCurrentBaseUrl = () => uni.getStorageSync('apiBaseUrl') || CLOUD_BASE_URL;
+
+const isAbortLikeError = (err = {}) => {
+	const errMsg = String(err.errMsg || '').toLowerCase();
+	return errMsg.includes('abort') || err.errNo === 21101 || err.errorCode === 100022;
+};
+
+const shouldRetryNetwork = (err = {}) => {
+	const errMsg = String(err.errMsg || '').toLowerCase();
+	return isAbortLikeError(err) || errMsg.includes('timeout') || errMsg.includes('network');
+};
+
+const request = (url, method, data = {}, options = {}) => {
 	return new Promise((resolve, reject) => {
-		uni.request({
-			url: BASE_URL + url,
-			method: method,
-			data: data,
-			header: {
-				'content-type': 'application/json'
-			},
-			timeout: 120000, // 增加超时时间到 2 分钟
-			success: (res) => {
-				if (res.statusCode === 200 && res.data.success) {
-					resolve(res.data);
-				} else {
+		const timeout = options.timeout || 120000;
+		const call = (baseUrl, attempt = 0, hasSwitchedBase = false) => {
+			uni.request({
+				url: baseUrl + url,
+				method: method,
+				data: data,
+				header: {
+					'content-type': 'application/json'
+				},
+				timeout,
+				success: (res) => {
+					if (res.statusCode === 200 && res.data.success) {
+						resolve(res.data);
+						return;
+					}
+
 					console.error('API Request Failed:', url, res.data);
 					const errorMsg = res.data.message || `请求失败(${res.statusCode})`;
-					
+
 					// 特殊错误码不显示Toast，交由页面自行处理
 					const silentErrors = ['QUOTA_EXCEEDED', 'VIP_QUOTA_EXCEEDED'];
 					if (!silentErrors.includes(res.data.code) && !silentErrors.includes(res.data.message)) {
@@ -26,19 +41,38 @@ const request = (url, method, data = {}) => {
 							icon: 'none'
 						});
 					}
-					
+
 					reject(res.data);
+				},
+				fail: (err) => {
+					console.error('API Network Error:', url, err);
+
+					const customBaseUrl = uni.getStorageSync('apiBaseUrl');
+
+					// 1) Retry once for transient abort/network failures.
+					if (attempt < 1 && shouldRetryNetwork(err)) {
+						setTimeout(() => call(baseUrl, attempt + 1, hasSwitchedBase), 300);
+						return;
+					}
+
+					// 2) If a custom base URL is configured and still failing, fallback to cloud URL.
+					if (!hasSwitchedBase && customBaseUrl && customBaseUrl !== CLOUD_BASE_URL && shouldRetryNetwork(err)) {
+						uni.removeStorageSync('apiBaseUrl');
+						setTimeout(() => call(CLOUD_BASE_URL, 0, true), 300);
+						return;
+					}
+
+					const toastMsg = isAbortLikeError(err) ? '请求中断，请重试' : '网络错误，请检查连接';
+					uni.showToast({
+						title: toastMsg,
+						icon: 'none'
+					});
+					reject(err);
 				}
-			},
-			fail: (err) => {
-				console.error('API Network Error:', url, err);
-				uni.showToast({
-					title: '网络错误，请检查连接',
-					icon: 'none'
-				});
-				reject(err);
-			}
-		});
+			});
+		};
+
+		call(getCurrentBaseUrl(), 0, false);
 	});
 };
 
@@ -50,7 +84,10 @@ export default {
 	drawFortune: (userId, theme) => request('/fortune/draw', 'POST', { userId, theme }),
 	
 	// AI深度解读
-	aiInterpret: (userId, signInfo, userInfo) => request('/fortune/ai-interpret', 'POST', { userId, signInfo, userInfo }),
+	aiInterpret: (userId, signInfo, userInfo) => request('/fortune/ai-interpret', 'POST', { userId, signInfo, userInfo }, { timeout: 300000 }),
+
+	// 查询AI深度解读结果（用于离开页面后恢复）
+	getAiInterpretResult: (userId, recordId) => request(`/fortune/ai-interpret/result/${recordId}`, 'GET', { userId }),
 	
 	// 创建支付订单
 	createPayment: (userId, productType, amount) => request('/payment/create', 'POST', { userId, productType, amount }),

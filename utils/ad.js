@@ -6,18 +6,18 @@ let closeHandler = null;
 let errorHandler = null;
 
 const getRewardedAd = () => {
+	if (typeof tt === 'undefined' || !tt.createRewardedVideoAd) {
+		throw new Error('AD_API_UNAVAILABLE');
+	}
 	if (rewardedAd) return rewardedAd;
-	// #ifdef MP-TOUTIAO
 	rewardedAd = tt.createRewardedVideoAd({
 		adUnitId: REWARDED_AD_UNIT_ID
 	});
-	// #endif
 	return rewardedAd;
 };
 
 export const showRewardedVideoAd = () => {
 	return new Promise((resolve, reject) => {
-		// #ifdef MP-TOUTIAO
 		if (typeof tt === 'undefined' || !tt.createRewardedVideoAd) {
 			reject(new Error('AD_API_UNAVAILABLE'));
 			return;
@@ -42,7 +42,8 @@ export const showRewardedVideoAd = () => {
 		closeHandler = (res) => {
 			closeHandler = null;
 			errorHandler = null;
-			resolve(Boolean(res && (res.isEnded || typeof res.isEnded === 'undefined')));
+			// Only grant reward when platform explicitly confirms full watch.
+			resolve(Boolean(res && res.isEnded === true));
 		};
 
 		errorHandler = (err) => {
@@ -60,11 +61,6 @@ export const showRewardedVideoAd = () => {
 					reject(err || new Error('AD_LOAD_FAILED'));
 				});
 		});
-		// #endif
-
-		// #ifndef MP-TOUTIAO
-		reject(new Error('NOT_MP_TOUTIAO'));
-		// #endif
 	});
 };
 

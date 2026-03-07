@@ -364,6 +364,53 @@ app.post('/api/fortune/ai-interpret', async (req, res) => {
   }
 });
 
+// 3.1 Query AI interpretation result by fortune record (for resume/polling)
+app.get('/api/fortune/ai-interpret/result/:recordId', async (req, res) => {
+  const { recordId } = req.params;
+  const { userId } = req.query;
+
+  if (!recordId || !userId) {
+    return res.status(400).json({ success: false, message: 'Missing recordId or userId' });
+  }
+
+  try {
+    const { data: record, error } = await supabase
+      .from('fortune_records')
+      .select(`
+        id,
+        ai_interpretation_id,
+        ai_interpretations (
+          id,
+          ai_response,
+          created_at
+        )
+      `)
+      .eq('id', recordId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ success: false, message: 'Record not found' });
+      }
+      throw error;
+    }
+
+    const aiData = Array.isArray(record.ai_interpretations)
+      ? record.ai_interpretations[0]
+      : record.ai_interpretations;
+
+    if (record.ai_interpretation_id && aiData && aiData.ai_response) {
+      return res.json({ success: true, status: 'done', data: aiData });
+    }
+
+    return res.json({ success: true, status: 'pending' });
+  } catch (err) {
+    console.error('Query AI result error:', err);
+    return res.status(500).json({ success: false, message: 'Query AI result failed' });
+  }
+});
+
 // 4. Payment (Mock)
 app.post('/api/payment/create', async (req, res) => {
   const { userId, productType, amount } = req.body;

@@ -48,6 +48,18 @@
 			if (vipStatus) this.isVip = true;
 		},
 		methods: {
+			safeVibrateLong() {
+				try {
+					const maybePromise = uni.vibrateLong ? uni.vibrateLong() : null;
+					if (maybePromise && typeof maybePromise.catch === 'function') {
+						maybePromise.catch((err) => {
+							console.warn('vibrateLong denied/failed:', err);
+						});
+					}
+				} catch (err) {
+					console.warn('vibrateLong denied/failed:', err);
+				}
+			},
 			startShake() {
 				if (this.isShaking) return;
 				
@@ -58,7 +70,7 @@
 				}
 
 				this.isShaking = true;
-				uni.vibrateLong();
+				this.safeVibrateLong();
 				
 				// 调用后端API求签
 				api.drawFortune(userInfo.id, this.themeName).then(res => {
