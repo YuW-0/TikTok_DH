@@ -79,6 +79,23 @@
 			if (this.timer) clearTimeout(this.timer);
 		},
 		methods: {
+			safeVibrateShort() {
+				// ByteDance mini program may deny vibration capability by platform policy.
+				// #ifdef MP-TOUTIAO
+				return;
+				// #endif
+
+				try {
+					const maybePromise = uni.vibrateShort ? uni.vibrateShort() : null;
+					if (maybePromise && typeof maybePromise.catch === 'function') {
+						maybePromise.catch((err) => {
+							console.warn('vibrateShort denied/failed:', err);
+						});
+					}
+				} catch (err) {
+					console.warn('vibrateShort denied/failed:', err);
+				}
+			},
 			knock(e) {
 				// 1. 增加功德
 				if (this.merit < 999) {
@@ -108,7 +125,7 @@
 				this.showPopup(e.detail.x, e.detail.y);
 				
 				// 5. 震动反馈
-				uni.vibrateShort();
+				this.safeVibrateShort();
 			},
 			uploadMerit() {
 				const userInfo = uni.getStorageSync('userInfo');

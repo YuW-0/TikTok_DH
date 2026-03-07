@@ -80,6 +80,13 @@
 				const suffix = str.length <= 5 ? str : str.slice(-5);
 				return `用户${suffix}`;
 			},
+			pickDisplayNickname(item = {}) {
+				const raw = item.nickname;
+				const nickname = raw === undefined || raw === null ? '' : String(raw).trim();
+				if (nickname) return nickname;
+				const userId = item && (item.userId || item.id) ? (item.userId || item.id) : '';
+				return this.formatNicknameById(userId);
+			},
 			goToMuyu() {
 				uni.navigateTo({
 					url: '/pages/muyu/muyu'
@@ -105,7 +112,7 @@
 						return {
 							...item,
 							userId,
-							nickname: this.formatNicknameById(userId)
+							nickname: this.pickDisplayNickname(item)
 						};
 					});
 					
@@ -130,10 +137,13 @@
                         }
 
 						const myMerit = myIndex !== -1 ? (this.rankList[myIndex].merit || 0) : (latestUserInfo.merit || dailyMerit || 0);
+						const myNickname = (latestUserInfo && String(latestUserInfo.nickname || '').trim())
+							|| (myIndex !== -1 ? this.rankList[myIndex].nickname : '')
+							|| this.formatNicknameById(latestUserInfo.id);
 
 						this.myRank = {
 							rank: rank,
-							nickname: this.formatNicknameById(latestUserInfo.id),
+							nickname: myNickname,
 							avatar: latestUserInfo.avatar || '/static/male_Taoist.png',
 							bestSign: bestSign,
 							merit: myMerit

@@ -30,12 +30,17 @@ const request = (url, method, data = {}, options = {}) => {
 						return;
 					}
 
-					console.error('API Request Failed:', url, res.data);
+					const silentErrors = ['QUOTA_EXCEEDED', 'VIP_QUOTA_EXCEEDED', 'LIMIT_REACHED', 'Daily limit reached', 'USER_NOT_FOUND', 'User not found'];
+					const isSilent = silentErrors.includes(res.data.code) || silentErrors.includes(res.data.message);
+					if (isSilent) {
+						console.warn('API Request Handled:', url, res.data);
+					} else {
+						console.error('API Request Failed:', url, res.data);
+					}
 					const errorMsg = res.data.message || `请求失败(${res.statusCode})`;
 
 					// 特殊错误码不显示Toast，交由页面自行处理
-					const silentErrors = ['QUOTA_EXCEEDED', 'VIP_QUOTA_EXCEEDED', 'LIMIT_REACHED', 'Daily limit reached'];
-					if (!silentErrors.includes(res.data.code) && !silentErrors.includes(res.data.message)) {
+					if (!isSilent) {
 						uni.showToast({
 							title: errorMsg,
 							icon: 'none'

@@ -25,7 +25,7 @@
 
 <script>
 	import api from '@/utils/api.js';
-	import { showRewardedVideoAd, getRewardedAdUnitId } from '@/utils/ad.js';
+	import { showInterstitialAd, getInterstitialAdUnitId, showRewardedVideoAd, getRewardedAdUnitId } from '@/utils/ad.js';
 	import SignResult from '@/components/sign-result/sign-result.vue';
 
 	export default {
@@ -84,8 +84,21 @@
 			},
 			async watchAdForExtraDraw(userId) {
 				try {
+					let adUnitId = getInterstitialAdUnitId();
 					uni.showLoading({ title: '加载广告中...' });
-					const isCompleted = await showRewardedVideoAd();
+					let isCompleted = false;
+
+					try {
+						isCompleted = await showInterstitialAd();
+					} catch (err) {
+						const errMsg = String((err && err.errMsg) || '').toLowerCase();
+						const isInvalidInterstitial = errMsg.includes('adunitid is invalid') || err.errCode === 1002 || err.errorCode === 140502;
+						if (!isInvalidInterstitial) throw err;
+
+						// Fallback to rewarded video if interstitial ad unit is invalid.
+						adUnitId = getRewardedAdUnitId();
+						isCompleted = await showRewardedVideoAd();
+					}
 					uni.hideLoading();
 
 					if (!isCompleted) {
@@ -93,7 +106,7 @@
 						return;
 					}
 
-					await api.rewardDrawChanceByAd(userId, getRewardedAdUnitId());
+					await api.rewardDrawChanceByAd(userId, adUnitId);
 					uni.showToast({ title: '机缘已续，可再求一签', icon: 'success' });
 
 					this.isShaking = true;

@@ -27,6 +27,7 @@ const TT_APPID = process.env.TT_APPID;
 const TT_APP_SECRET = process.env.TT_APP_SECRET;
 const DOUYIN_JSCODE2SESSION_URL = process.env.DOUYIN_JSCODE2SESSION_URL || 'https://developer.toutiao.com/api/apps/v2/jscode2session';
 const DOUYIN_REWARDED_AD_UNIT_ID = process.env.DOUYIN_REWARDED_AD_UNIT_ID || 'u3qf30vvzm08e9fp1e';
+const DOUYIN_INTERSTITIAL_AD_UNIT_ID = process.env.DOUYIN_INTERSTITIAL_AD_UNIT_ID || 'r4y57a3qlquw0mckgi';
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -448,7 +449,10 @@ app.get('/api/user/:id', async (req, res) => {
       .select('*')
       .eq('id', req.params.id)
       .single();
-    
+
+    if (error && error.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
     if (error) throw error;
     res.json({ success: true, user });
   } catch (err) {
@@ -621,7 +625,10 @@ app.post('/api/user/merit', async (req, res) => {
       .eq('id', userId)
       .select()
       .single();
-      
+
+    if (error && error.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
     if (error) throw error;
     res.json({ success: true, merit: safeMerit });
   } catch (err) {
@@ -865,8 +872,12 @@ app.get('/api/chat/history/:userId', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Unsupported reward scene' });
     }
 
-    if (adUnitId !== DOUYIN_REWARDED_AD_UNIT_ID) {
-      return res.status(400).json({ success: false, message: 'Invalid ad unit' });
+    if (scene === 'chat_quota' && adUnitId !== DOUYIN_REWARDED_AD_UNIT_ID) {
+      return res.status(400).json({ success: false, message: 'Invalid ad unit for chat reward' });
+    }
+
+    if (scene === 'draw_quota' && adUnitId !== DOUYIN_INTERSTITIAL_AD_UNIT_ID && adUnitId !== DOUYIN_REWARDED_AD_UNIT_ID) {
+      return res.status(400).json({ success: false, message: 'Invalid ad unit for draw reward' });
     }
 
     try {

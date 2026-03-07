@@ -19,10 +19,10 @@
 				</view>
 				<view class="item-content">
 					<view class="sign-info">
-						<text class="sign-level">{{ item.fortune_signs.sign_level }}</text>
-						<text class="sign-title">{{ item.fortune_signs.sign_title }}</text>
+						<text class="sign-level">{{ getFortuneSign(item).sign_level || getFortuneSign(item).signLevel }}</text>
+						<text class="sign-title">{{ getFortuneSign(item).sign_title || getFortuneSign(item).signTitle }}</text>
 					</view>
-					<text class="sign-text">{{ item.fortune_signs.sign_text }}</text>
+					<text class="sign-text">{{ getFortuneSign(item).sign_text || getFortuneSign(item).signText }}</text>
 				</view>
 			</view>
 		</view>
@@ -60,6 +60,24 @@
 			this.loadHistory();
 		},
 		methods: {
+			getFortuneSign(item = {}) {
+				const raw = item.fortune_signs;
+				if (Array.isArray(raw)) return raw[0] || {};
+				return raw || {};
+			},
+			normalizeHistorySign(item = {}) {
+				const sign = this.getFortuneSign(item);
+				return {
+					sign_title: sign.sign_title || sign.signTitle || sign.title || '',
+					sign_level: sign.sign_level || sign.signLevel || sign.level || '',
+					sign_text: sign.sign_text || sign.signText || sign.text || '',
+					basic_interpretation: sign.basic_interpretation || sign.basicInterpretation || sign.interpretation || '',
+					full_interpretation: sign.full_interpretation || sign.fullInterpretation || '',
+					theme: item.theme || sign.theme || '综合',
+					ai_interpretations: item.ai_interpretations || sign.ai_interpretations || null,
+					recordId: item.id || sign.id
+				};
+			},
 			loadHistory() {
 				const userInfo = uni.getStorageSync('userInfo');
 				if (!userInfo) return;
@@ -80,14 +98,10 @@
 				});
 			},
 			showDetail(item) {
-				// 构造弹窗所需的数据格式
-				this.currentSign = {
-					...item.fortune_signs,
-					full_interpretation: item.fortune_signs.full_interpretation,
-					ai_interpretations: item.ai_interpretations, // 传递关联的AI解读
-					recordId: item.id // 传递记录ID
-				};
-				this.$refs.signResult.open();
+				this.currentSign = this.normalizeHistorySign(item);
+				this.$nextTick(() => {
+					this.$refs.signResult && this.$refs.signResult.open();
+				});
 			},
 			formatDate(dateStr) {
 				const date = new Date(dateStr);

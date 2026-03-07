@@ -102,6 +102,27 @@
 			}
 		},
 		methods: {
+			showDyToast(title, icon = 'none') {
+				if (typeof tt !== 'undefined' && tt.showToast) {
+					tt.showToast({ title, icon });
+					return;
+				}
+				uni.showToast({ title, icon });
+			},
+			showDyLoading(title = '请稍候...') {
+				if (typeof tt !== 'undefined' && tt.showLoading) {
+					tt.showLoading({ title });
+					return;
+				}
+				uni.showLoading({ title });
+			},
+			hideDyLoading() {
+				if (typeof tt !== 'undefined' && tt.hideLoading) {
+					tt.hideLoading();
+					return;
+				}
+				uni.hideLoading();
+			},
 			loadHistory(welcomeMsg) {
 				api.getChatHistory(this.userInfo.id).then(res => {
 					if (res.messages && res.messages.length > 0) {
@@ -202,30 +223,30 @@
 				const userId = this.userInfo ? this.userInfo.id : '';
 				if (!userId) return;
 
-				uni.showLoading({ title: '请稍候...' });
+				this.showDyLoading('请稍候...');
 				showRewardedVideoAd().then((completed) => {
 					if (!completed) {
-						uni.hideLoading();
-						uni.showToast({ title: '未看完广告，未获得机缘', icon: 'none' });
+						this.hideDyLoading();
+						this.showDyToast('未看完广告，未获得机缘');
 						return;
 					}
 
 					api.rewardChatChanceByAd(userId, getRewardedAdUnitId()).then(() => {
-						uni.hideLoading();
-						uni.showToast({ title: '机缘已续，可继续问道', icon: 'success' });
+						this.hideDyLoading();
+						this.showDyToast('机缘已续，可继续问道', 'success');
 						this.messages.push({
 							role: 'ai',
 							content: '善信诚心可鉴，机缘已续。请重新告知您的困惑。'
 						});
 						this.scrollToBottom();
 					}).catch(() => {
-						uni.hideLoading();
-						uni.showToast({ title: '领取机缘失败，请稍后再试', icon: 'none' });
+						this.hideDyLoading();
+						this.showDyToast('领取机缘失败，请稍后再试');
 					});
 				}).catch((err) => {
-					uni.hideLoading();
+					this.hideDyLoading();
 					console.error('Rewarded ad failed:', err);
-					uni.showToast({ title: '广告暂不可用，请稍后再试', icon: 'none' });
+					this.showDyToast('广告暂不可用，请稍后再试');
 				});
 			},
 			buyExtraChance() {

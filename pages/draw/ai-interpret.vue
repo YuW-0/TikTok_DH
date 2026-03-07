@@ -246,6 +246,12 @@
 				this.showResult = false;
 				this.setPending(true);
 				this.startPollingResult();
+				uni.showModal({
+					title: '已解锁',
+					content: '大师正在批注中，预计1-2分钟完成。您可先退出，稍后到“求签历史”查看结果。',
+					showCancel: false,
+					confirmText: '知道了'
+				});
 				
 				// 调用后端 AI 解读接口
 				api.aiInterpret(userInfo.id, this.signInfo, this.formData).then(res => {
@@ -439,8 +445,8 @@
 			color: #333;
 		}
 		.price {
-			font-size: 20px;
-			font-weight: bold;
+			font-size: 14px;
+			font-weight: normal;
 			color: #DC143C;
 		}
 	}

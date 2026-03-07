@@ -29,6 +29,18 @@
 							<text class="inter-content">{{ normalizedSign.full_interpretation }}</text>
 						</view>
 
+						<view class="lucky-section" v-if="normalizedSign.lucky_number || normalizedSign.lucky_color">
+							<text class="inter-title">【吉运指引】</text>
+							<view class="lucky-row" v-if="normalizedSign.lucky_number">
+								<text class="lucky-label">幸运数字：</text>
+								<text class="lucky-value">{{ normalizedSign.lucky_number }}</text>
+							</view>
+							<view class="lucky-row" v-if="normalizedSign.lucky_color">
+								<text class="lucky-label">幸运颜色：</text>
+								<text class="lucky-value">{{ normalizedSign.lucky_color }}</text>
+							</view>
+						</view>
+
 						<view class="ai-section" v-if="!hasAiResult">
 							<view class="ai-divider">
 								<text>✨ 大师亲批 · 古籍精解 ✨</text>
@@ -47,6 +59,9 @@
 							<text class="result-bridge-text">天机未尽，若心中仍有疑惑，可再叩仙门请大师续断。</text>
 							<button class="ask-more-btn" @click="goToMasterConsultation">再叩仙门·续问天机</button>
 						</view>
+					</view>
+					<view class="scroll-guide">
+						<text>往下滑动查看更多</text>
 					</view>
 					<view class="scroll-bottom"></view>
 				</view>
@@ -94,6 +109,8 @@
 					sign_text: pickFirst(source.sign_text, source.signText, source.text, nested.sign_text, nested.signText, nested.text),
 					basic_interpretation: pickFirst(source.basic_interpretation, source.basicInterpretation, source.interpretation, nested.basic_interpretation, nested.basicInterpretation, nested.interpretation),
 					full_interpretation: pickFirst(source.full_interpretation, source.fullInterpretation, nested.full_interpretation, nested.fullInterpretation),
+					lucky_number: pickFirst(source.lucky_number, source.luckyNumber, nested.lucky_number, nested.luckyNumber),
+					lucky_color: pickFirst(source.lucky_color, source.luckyColor, nested.lucky_color, nested.luckyColor),
 					theme: pickFirst(source.theme, nested.theme, '综合'),
 					recordId: pickFirst(source.recordId, source.id, nested.recordId, nested.id)
 				};
@@ -165,7 +182,8 @@
 <style lang="scss">
 	// 弹窗样式
 	.result-modal {
-		width: 300px;
+		width: 92vw;
+		max-width: 360px;
 		height: 600px;
 		display: flex;
 		justify-content: center;
@@ -193,6 +211,31 @@
 		border: 1px solid #D2B48C;
 	}
 
+	.scroll-guide {
+		position: absolute;
+		left: 50%;
+		bottom: 30px;
+		transform: translateX(-50%);
+		background-color: rgba(255, 255, 255, 0.92);
+		border: 1px solid #e8d7b6;
+		border-radius: 12px;
+		padding: 4px 10px;
+		pointer-events: none;
+		z-index: 3;
+		animation: guideFloat 1.6s ease-in-out infinite;
+
+		text {
+			font-size: 11px;
+			color: #8B4513;
+		}
+	}
+
+	@keyframes guideFloat {
+		0% { transform: translateX(-50%) translateY(0); opacity: 0.85; }
+		50% { transform: translateX(-50%) translateY(4px); opacity: 1; }
+		100% { transform: translateX(-50%) translateY(0); opacity: 0.85; }
+	}
+
 	.scroll-top, .scroll-bottom {
 		height: 20px;
 		background-color: #8B4513;
@@ -203,6 +246,7 @@
 		flex: 1;
 		padding: 20px;
 		overflow-y: auto;
+		overflow-x: hidden;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -287,6 +331,33 @@
 		margin-bottom: 15px;
 	}
 
+	.lucky-section {
+		width: 100%;
+		margin-bottom: 15px;
+		padding: 10px;
+		background-color: #fffaf0;
+		border: 1px solid #f1e0ba;
+		border-radius: 8px;
+	}
+
+	.lucky-row {
+		display: flex;
+		align-items: center;
+		margin-top: 4px;
+	}
+
+	.lucky-label {
+		font-size: 13px;
+		color: #8B4513;
+		margin-right: 6px;
+	}
+
+	.lucky-value {
+		font-size: 13px;
+		color: #333;
+		font-weight: bold;
+	}
+
 	.inter-title {
 		font-weight: bold;
 		color: #8B4513;
@@ -299,6 +370,7 @@
 		font-size: 14px;
 		color: #555;
 		line-height: 1.5;
+		word-break: break-all;
 	}
 
 	.lock-area {
