@@ -308,18 +308,21 @@
 							this.scrollToBottom();
 							return;
 						}
-						if (!hasDelta) {
-							const aiMsg = this.messages[this.messages.length - 1];
-							if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {
-								this.messages.pop();
+						recoverFromLatestHistory().then((recovered) => {
+							if (recovered) return;
+							if (!hasDelta) {
+								const aiMsg = this.messages[this.messages.length - 1];
+								if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {
+									this.messages.pop();
+								}
 							}
-						}
-						const fallbackText = String(err && err.message ? err.message : '').trim() || '大师正在打坐，请稍后再试。';
-						this.messages.push({
-							role: 'ai',
-							content: fallbackText
+							const fallbackText = String(err && err.message ? err.message : '').trim() || '大师正在打坐，请稍后再试。';
+							this.messages.push({
+								role: 'ai',
+								content: fallbackText
+							});
+							this.scrollToBottom();
 						});
-						this.scrollToBottom();
 					}
 				});
 			},

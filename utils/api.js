@@ -381,7 +381,8 @@ export default {
 				buffer: '',
 				done: false,
 				error: null,
-				settled: false
+				settled: false,
+				fallbacking: false
 			};
 
 			const settleResolve = () => {
@@ -438,6 +439,10 @@ export default {
 				},
 				fail: (err) => {
 					if (state.settled) return;
+					if (state.fallbacking) {
+						console.warn('[api.chatAskStream] ignore stream fail during fallback', { streamTraceId, err });
+						return;
+					}
 					console.warn('[api.chatAskStream] request fail callback', { streamTraceId, err, fullTextLength: state.fullText.length });
 					if (state.fullText) {
 						onDone(state.fullText);
@@ -453,6 +458,7 @@ export default {
 				console.info('[api.chatAskStream] chunk mode enabled', { streamTraceId });
 				requestTask.onChunkReceived((chunkRes) => {
 					if (state.settled) return;
+					if (state.fallbacking) return;
 					const text = decodeChunkBuffer(chunkRes.data);
 					if (!text) return;
 					parseAndDispatchLines(text, state);
@@ -468,9 +474,7 @@ export default {
 			} else {
 				console.warn('[api.chatAskStream] chunk mode unavailable, fallback to non-stream', { streamTraceId });
 				// Runtime does not support chunk callback, fallback to non-stream API.
-				if (requestTask && typeof requestTask.abort === 'function') {
-					requestTask.abort();
-				}
+				state.fallbacking = true;
 				request('/chat/ask', 'POST', { userId, message, history }, { timeout: 300000 })
 					.then((res) => {
 						if (state.settled) return;
