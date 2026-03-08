@@ -40,7 +40,7 @@ const CHAT_TOKEN_COST = 8;
 const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 
 const SAFE_SIGN_LEVELS = ['上上签', '上吉签', '中吉签', '中平签'];
-const DRAW_MODEL_CANDIDATES = ['glm-4.5-air', 'glm-4.5', 'glm-4.6'];
+const DRAW_MODEL = 'glm-4.5-air';
 
 const parseJsonFromText = (rawText = '') => {
   const text = String(rawText || '').trim();
@@ -80,32 +80,22 @@ const buildLocalFallbackSign = ({ themeName, signLevel }) => {
   };
 };
 
-const requestDrawJsonWithFallbackModel = async (messages) => {
-  let lastError = null;
+const requestDrawJson = async (messages) => {
+  const aiResp = await openai.chat.completions.create({
+    model: DRAW_MODEL,
+    messages,
+    temperature: 0.6,
+    max_tokens: 260,
+    stream: false
+  });
 
-  for (const model of DRAW_MODEL_CANDIDATES) {
-    try {
-      const aiResp = await openai.chat.completions.create({
-        model,
-        messages,
-        temperature: 0.6,
-        max_tokens: 420,
-        stream: false
-      });
-
-      const rawText = (((aiResp || {}).choices || [])[0] || {}).message?.content || '';
-      const parsed = parseJsonFromText(rawText);
-      if (parsed) {
-        return parsed;
-      }
-      lastError = new Error(`Invalid AI draw response format from model: ${model}`);
-    } catch (err) {
-      lastError = err;
-      console.error(`Draw model failed (${model}):`, err?.message || err);
-    }
+  const rawText = (((aiResp || {}).choices || [])[0] || {}).message?.content || '';
+  const parsed = parseJsonFromText(rawText);
+  if (!parsed) {
+    throw new Error(`Invalid AI draw response format from model: ${DRAW_MODEL}`);
   }
 
-  throw (lastError || new Error('All draw models failed'));
+  return parsed;
 };
 
 const todayDateStr = () => new Date().toISOString().split('T')[0];
@@ -340,9 +330,9 @@ app.post('/api/fortune/draw', async (req, res) => {
       '要求:',
       '0) 所有内容必须围绕“主题名称”展开，不可泛化到其他主题。',
       '1) sign_title 2-8字，不能出现“第X签”或序号。',
-      '2) sign_text 30-60字，古风但易懂。',
-      '3) basic_interpretation 35-80字。',
-      '4) full_interpretation 120-220字，给可执行建议，避免空话。',
+      '2) sign_text 24-40字，古风但易懂。',
+      '3) basic_interpretation 28-55字。',
+      '4) full_interpretation 80-130字，给可执行建议，避免空话。',
       '5) lucky_number 为1-99数字字符串。',
       '6) lucky_color 为常见中文颜色词。',
       '7) 不得出现下签/下下签，不得输出免责声明。'
@@ -361,7 +351,7 @@ app.post('/api/fortune/draw', async (req, res) => {
 
     let parsed = null;
     try {
-      parsed = await requestDrawJsonWithFallbackModel(messages);
+      parsed = await requestDrawJson(messages);
     } catch (aiErr) {
       console.error('Draw AI generation failed, fallback to local sign:', aiErr?.message || aiErr);
       parsed = buildLocalFallbackSign({
