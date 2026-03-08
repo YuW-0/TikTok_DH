@@ -148,12 +148,64 @@
 			if (options.signText) this.signInfo.signText = decodeURIComponent(options.signText);
 			if (options.theme) this.signInfo.theme = decodeURIComponent(options.theme);
 			if (options.recordId) this.signInfo.recordId = options.recordId; // 确保接收 recordId
+			this.applySavedProfile();
 			this.tryRestoreInterpretation();
 		},
 		onUnload() {
 			this.stopPolling();
 		},
 		methods: {
+			applySavedProfile() {
+				const profile = uni.getStorageSync('user_profile');
+				if (!profile || typeof profile !== 'object') return;
+
+				const genderText = String(profile.gender || '').trim();
+				const birthHourLabel = String(profile.birthHour || '').trim();
+				const mappedGender = genderText === '女' ? 2 : (genderText === '男' ? 1 : this.formData.gender);
+				const mappedHour = this.mapBirthHourToValue(birthHourLabel);
+
+				this.formData = {
+					...this.formData,
+					name: String(profile.name || '').trim() || this.formData.name,
+					gender: mappedGender,
+					birthday: String(profile.birthDate || '').trim() || this.formData.birthday,
+					birthTime: mappedHour || this.formData.birthTime
+				};
+			},
+			mapBirthHourToValue(label) {
+				if (!label) return '';
+				const key = label.split('(')[0];
+				const map = {
+					'子时': 'zi',
+					'丑时': 'chou',
+					'寅时': 'yin',
+					'卯时': 'mao',
+					'辰时': 'chen',
+					'巳时': 'si',
+					'午时': 'wu',
+					'未时': 'wei',
+					'申时': 'shen',
+					'酉时': 'you',
+					'戌时': 'xu',
+					'亥时': 'hai'
+				};
+				return map[key] || '';
+			},
+			mapBirthHourToLabel(value) {
+				const target = (this.timeRanges || []).find((item) => item.value === value);
+				if (!target || !target.text) return '';
+				return String(target.text).split(' ')[0];
+			},
+			syncProfileFromForm() {
+				const profile = {
+					name: String(this.formData.name || '').trim(),
+					gender: this.formData.gender === 2 ? '女' : '男',
+					birthDate: String(this.formData.birthday || '').trim(),
+					birthHour: this.mapBirthHourToLabel(this.formData.birthTime)
+				};
+				if (!profile.name || !profile.birthDate || !profile.birthHour) return;
+				uni.setStorageSync('user_profile', profile);
+			},
 			getPendingKey() {
 				const userInfo = uni.getStorageSync('userInfo') || {};
 				const userId = userInfo.id || 'guest';
@@ -271,13 +323,15 @@
 					return;
 				}
 
+				this.syncProfileFromForm();
+
 				this.loading = true;
 				this.showResult = false;
 				this.setPending(true);
 				this.startPollingResult();
 				uni.showModal({
 					title: '已解锁',
-					content: '大师正在批注中，预计1-2分钟完成。您可先退出，稍后到“求签历史”查看结果。',
+					content: '大师正在批注中，预计1-2分钟完成。您可先退出，稍后到“历史签文”查看结果。',
 					showCancel: false,
 					confirmText: '知道了'
 				});

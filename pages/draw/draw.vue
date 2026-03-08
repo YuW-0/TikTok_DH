@@ -8,14 +8,14 @@
 		<view class="shake-area" @click="startShake">
 			<view class="cylinder-wrapper" :class="{ shaking: isShaking }">
 				<view class="cylinder-body">
-					<text class="cylinder-text">求签</text>
+					<text class="cylinder-text">测算</text>
 				</view>
 				<view class="sticks">
 					<view class="stick" v-for="n in 8" :key="n"></view>
 				</view>
 			</view>
 			<text class="shake-hint" v-if="!isShaking">点击屏幕或摇动手机</text>
-			<text class="shake-hint" v-else>正在求签中...</text>
+			<text class="shake-hint" v-else>正在测算中...</text>
 		</view>
 
 		<!-- 签文弹窗 -->
@@ -49,6 +49,26 @@
 			if (vipStatus) this.isVip = true;
 		},
 		methods: {
+			getLocalSignLevel() {
+				const levels = ['上上签', '上吉签', '中吉签', '中平签'];
+				return levels[Math.floor(Math.random() * levels.length)];
+			},
+			getUserProfile() {
+				const profile = uni.getStorageSync('user_profile');
+				if (!profile || typeof profile !== 'object') {
+					return null;
+				}
+				return {
+					name: String(profile.name || '').trim(),
+					gender: String(profile.gender || '').trim(),
+					birthDate: String(profile.birthDate || '').trim(),
+					birthHour: String(profile.birthHour || '').trim()
+				};
+			},
+			hasCompleteProfile(profile) {
+				if (!profile) return false;
+				return Boolean(profile.name && profile.gender && profile.birthDate && profile.birthHour);
+			},
 			handleDrawSuccess(res) {
 				setTimeout(() => {
 					this.isShaking = false;
@@ -56,8 +76,8 @@
 					this.$refs.signResult.open();
 				}, 500);
 			},
-			requestDraw(userId) {
-				api.drawFortune(userId, this.themeName).then((res) => {
+			requestDraw(userId, userProfile, signLevel) {
+				api.drawFortune(userId, this.themeName, userProfile, signLevel).then((res) => {
 					this.handleDrawSuccess(res);
 				}).catch((err) => {
 					this.isShaking = false;
@@ -68,7 +88,7 @@
 					if (isLimitReached) {
 						uni.showModal({
 							title: '次数已用完',
-							content: '今日免费求签次数已用完，完整观看广告可额外求签1次。',
+							content: '今日免费测算次数已用完，完整观看广告可额外测算1次。',
 							confirmText: '看广告',
 							cancelText: '稍后再来',
 							success: (modalRes) => {
@@ -78,7 +98,7 @@
 							}
 						});
 					} else {
-						uni.showToast({ title: '求签失败，请重试', icon: 'none' });
+						uni.showToast({ title: '测算失败，请重试', icon: 'none' });
 					}
 				});
 			},
@@ -146,8 +166,28 @@
 
 				this.isShaking = true;
 				this.safeVibrateLong();
+				const userProfile = this.getUserProfile();
+				const signLevel = this.getLocalSignLevel();
 
-				this.requestDraw(userInfo.id);
+				if (!this.hasCompleteProfile(userProfile)) {
+					uni.showModal({
+						title: '温馨提示',
+						content: '完善个人信息后再测算会更精准，是否前往填写？',
+						confirmText: '去填写',
+						cancelText: '继续',
+						success: (modalRes) => {
+							if (modalRes.confirm) {
+								this.isShaking = false;
+								uni.navigateTo({ url: '/pages/mine/profile' });
+								return;
+							}
+							this.requestDraw(userInfo.id, userProfile, signLevel);
+						}
+					});
+					return;
+				}
+
+				this.requestDraw(userInfo.id, userProfile, signLevel);
 			},
 			goToVip() {
 				uni.navigateTo({ url: '/pages/pay/pay' });

@@ -21,8 +21,15 @@
 		{
 			"path": "pages/mine/history",
 			"style": {
-				"navigationBarTitleText": "求签历史",
+				"navigationBarTitleText": "历史签文",
 				"enablePullDownRefresh": true
+			}
+		},
+		{
+			"path": "pages/mine/profile",
+			"style": {
+				"navigationBarTitleText": "个人信息",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
@@ -68,6 +75,27 @@
 			}
 		},
 		{
+			"path": "pages/special/fortune-flip",
+			"style": {
+				"navigationBarTitleText": "福袋翻翻乐",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/special/merit-match",
+			"style": {
+				"navigationBarTitleText": "功德连连看",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/special/luck-wheel",
+			"style": {
+				"navigationBarTitleText": "福分罗盘",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
 			"path": "pages/legal/privacy",
 			"style": {
 				"navigationBarTitleText": "隐私政策",
@@ -84,7 +112,7 @@
 	],
 	"globalStyle": {
 		"navigationBarTextStyle": "white",
-		"navigationBarTitleText": "每日求签",
+		"navigationBarTitleText": "每日测算",
 		"navigationBarBackgroundColor": "#DC143C",
 		"backgroundColor": "#FAF0E6"
 	},
@@ -96,7 +124,7 @@
 		"list": [
 			{
 				"pagePath": "pages/home/home",
-				"text": "求签",
+				"text": "测算",
 				"iconPath": "static/drawlots_unselected.png",
 				"selectedIconPath": "static/drawlots_selected.png"
 			},

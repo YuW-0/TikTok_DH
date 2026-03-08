@@ -28,7 +28,7 @@
 		</view>
 		<view class="empty-state" v-else>
 			<uni-icons type="calendar" size="60" color="#D2B48C"></uni-icons>
-			<text class="empty-text">暂无求签记录</text>
+			<text class="empty-text">暂无测算记录</text>
 		</view>
 
 		<!-- 签文详情弹窗 -->

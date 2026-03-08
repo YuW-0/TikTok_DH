@@ -11,7 +11,7 @@
 		
 		<!-- 主题选择区 -->
 		<view class="theme-section">
-			<text class="section-title">今日求签主题</text>
+			<text class="section-title">主题</text>
 			<scroll-view class="theme-scroll" scroll-x="true" show-scrollbar="false">
 				<view class="theme-list">
 					<view 
@@ -28,18 +28,18 @@
 			</scroll-view>
 		</view>
 
-		<!-- 求签入口 -->
+		<!-- 测算入口 -->
 		<view class="draw-section">
 			<view class="draw-container" @click="goToDraw">
 				<view class="draw-cylinder">
 					<view class="cylinder-body">
-						<text class="cylinder-text">求签</text>
+						<text class="cylinder-text">测算</text>
 					</view>
 					<view class="sticks">
 						<view class="stick" v-for="n in 5" :key="n"></view>
 					</view>
 				</view>
-				<text class="draw-hint">点击摇签筒开始求签</text>
+				<text class="draw-hint">点击摇签筒开始测算</text>
 			</view>
 		</view>
 
@@ -51,8 +51,8 @@
 						<uni-icons type="chatbubble-filled" size="24" color="#fff"></uni-icons>
 					</view>
 					<view class="chat-text">
-						<text class="chat-title">寻师问道</text>
-						<text class="chat-subtitle">古籍大师在线解惑</text>
+						<text class="chat-title">AI古籍大师解惑</text>
+						<text class="chat-subtitle">来问问你的疑惑吧</text>
 					</view>
 				</view>
 				<uni-icons type="arrowright" size="18" color="#fff" style="opacity: 0.8;"></uni-icons>
@@ -67,14 +67,14 @@
 			<view class="summary-card">
 				<view class="summary-header">
 					<view>
-						<text class="summary-title">今日运势概览</text>
+						<text class="summary-title">今日黄历</text>
 						<text class="lunar-date">{{ dailyFortune.lunarStr }}</text>
 					</view>
 					<text class="summary-date">{{ currentDate }}</text>
 				</view>
 				<view class="summary-content">
 					<view class="star-rating">
-						<text>综合运势：</text>
+						<text>综合指数：</text>
 						<uni-rate :value="dailyFortune.stars" readonly size="18" active-color="#FFD700" />
 					</view>
 					<text class="summary-desc">{{ dailyFortune.text }}</text>

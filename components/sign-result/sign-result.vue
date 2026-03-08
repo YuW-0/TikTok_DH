@@ -43,10 +43,10 @@
 
 						<view class="ai-section" v-if="!hasAiResult">
 							<view class="ai-divider">
-								<text>✨ 大师亲批 · 古籍精解 ✨</text>
+								<text>✨ AI大师亲批 · 古籍精解 ✨</text>
 							</view>
 							<button class="ai-btn" @click="goToAiInterpret">
-								<text>获取大师一对一深度解读</text>
+								<text>获取AI大师深度解读</text>
 							</button>
 							<text class="ai-desc">填写信息后，观看广告即可解锁大师一对一深度解读</text>
 						</view>

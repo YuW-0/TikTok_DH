@@ -71,7 +71,7 @@
 					{ name: '终身善缘', price: '199.0', originalPrice: '399.0', tag: '福泽延绵', type: 'vip_lifetime' }
 				],
 				privileges: [
-					{ icon: 'star-filled', text: '无限求签' },
+					{ icon: 'star-filled', text: '无限测算' },
 					{ icon: 'eye-filled', text: '免除广告' },
 					{ icon: 'vip-filled', text: '增量对话' },
 					{ icon: 'gift-filled', text: '专属装扮' }

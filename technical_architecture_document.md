@@ -46,8 +46,8 @@ graph TD
 | 路由                        | 用途      |
 | ------------------------- | ------- |
 | /api/auth/login           | 微信登录授权  |
-| /api/fortune/daily        | 每日求签接口  |
-| /api/fortune/paid         | 付费求签接口  |
+| /api/fortune/daily        | 每日测算接口  |
+| /api/fortune/paid         | 付费测算接口  |
 | /api/user/profile         | 获取用户信息  |
 | /api/user/vip-status      | 获取VIP状态 |
 | /api/payment/create-order | 创建支付订单  |
@@ -92,9 +92,9 @@ POST /api/auth/login
 }
 ```
 
-### 4.2 求签相关
+### 4.2 测算相关
 
-**每日求签**
+**每日测算**
 
 ```
 POST /api/fortune/daily
@@ -110,7 +110,7 @@ Authorization: Bearer jwt_token
 
 | 参数名   | 参数类型   | 是否必需 | 描述             |
 | ----- | ------ | ---- | -------------- |
-| theme | string | 是    | 求签主题（财运/事业/爱情） |
+| theme | string | 是    | 测算主题（财运/事业/爱情） |
 
 响应：
 
@@ -136,7 +136,7 @@ Authorization: Bearer jwt_token
 }
 ```
 
-**付费求签**
+**付费测算**
 
 ```
 POST /api/fortune/paid
@@ -334,10 +334,10 @@ INSERT INTO fortune_signs (id, sign_text, basic_interpretation, full_interpretat
 ('love_001', '桃花朵朵，情缘将至', '感情运势上升，有望遇到良缘', '您的感情运势正处于高峰期，单身者有望遇到心仪对象，已有伴侣者感情会更加甜蜜。建议多参加社交活动。', 5, '2', '粉色', 'love');
 ```
 
-**求签记录表 (fortune\_records)**
+**测算记录表 (fortune\_records)**
 
 ```sql
--- 创建求签记录表
+-- 创建测算记录表
 CREATE TABLE fortune_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id),
@@ -394,14 +394,14 @@ CREATE INDEX idx_vip_subscriptions_active ON vip_subscriptions(is_active);
 
 ## 7. 核心算法设计
 
-### 7.1 求签算法
+### 7.1 测算算法
 
 ```javascript
-// 求签算法伪代码
+// 测算算法伪代码
 function getFortuneSign(userId, theme, isVip) {
-    // 1. 检查用户今日是否已求签
+    // 1. 检查用户今日是否已测算
     if (!isVip && hasDailyFortuneUsed(userId)) {
-        return { error: "今日求签次数已用完" };
+        return { error: "今日测算次数已用完" };
     }
     
     // 2. 根据主题获取对应签文池
@@ -411,7 +411,7 @@ function getFortuneSign(userId, theme, isVip) {
     const weights = calculateWeights(userId, signPool);
     const selectedSign = weightedRandomSelect(signPool, weights);
     
-    // 4. 记录求签历史
+    // 4. 记录历史签文
     recordFortune(userId, selectedSign.id, theme);
     
     // 5. 返回签文内容
@@ -422,12 +422,12 @@ function getFortuneSign(userId, theme, isVip) {
 ### 7.2 运势评分算法
 
 ```javascript
-// 运势评分算法
+// 评分算法
 function calculateFortuneScore(userId) {
     const recentFortunes = getRecentFortunes(userId, 30);
     let totalScore = 0;
     
-    // 基于近期求签结果计算综合运势
+    // 基于近期测算结果计算
     recentFortunes.forEach(fortune => {
         totalScore += fortune.level * getTimeDecay(fortune.date);
     });

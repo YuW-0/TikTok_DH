@@ -90,8 +90,13 @@ export default {
 	// 用户登录
 	login: (code) => request('/auth/login', 'POST', { code }),
 	
-	// 求签
-	drawFortune: (userId, theme) => request('/fortune/draw', 'POST', { userId, theme }),
+	// 测算
+	drawFortune: (userId, theme, userProfile, signLevel) => request('/fortune/draw', 'POST', {
+		userId,
+		theme,
+		userProfile,
+		signLevel
+	}),
 	
 	// AI深度解读
 	aiInterpret: (userId, signInfo, userInfo) => request('/fortune/ai-interpret', 'POST', { userId, signInfo, userInfo }, { timeout: 300000 }),
@@ -120,7 +125,7 @@ export default {
 	// 绑定邀请码
 	bindInviteCode: (userId, inviteCode) => request('/token/bind-invite', 'POST', { userId, inviteCode }),
 	
-	// 获取求签历史
+	// 获取历史签文
 	getFortuneHistory: (userId) => request(`/fortune/history/${userId}`, 'GET'),
 	
 	// 获取福运榜
@@ -138,7 +143,7 @@ export default {
 	// 购买额外对话次数
 	buyChatChance: (userId, amount) => request('/payment/buy-chat-chance', 'POST', { userId, amount }),
 
-	// 看广告领取一次额外求签机会
+	// 看广告领取一次额外测算机会
 	rewardDrawChanceByAd: (userId, adUnitId) => request('/ad/reward', 'POST', { userId, adUnitId, scene: 'draw_quota' }),
 	
 	// 获取聊天记录

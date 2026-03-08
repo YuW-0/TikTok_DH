@@ -55,7 +55,15 @@
 		<view class="menu-list">
 			<uni-list>
 				<uni-list-item 
-					title="我的求签历史" 
+					title="个人信息" 
+					show-extra-icon 
+					:extra-icon="{color: '#DC143C', size: '22', type: 'person-filled'}" 
+					link
+					clickable
+					@click="goToProfile"
+				/>
+				<uni-list-item 
+					title="我的历史签文" 
 					show-extra-icon 
 					:extra-icon="{color: '#DC143C', size: '22', type: 'list'}" 
 					link
@@ -358,6 +366,11 @@
 			goToHistory() {
 				uni.navigateTo({
 					url: '/pages/mine/history'
+				});
+			},
+			goToProfile() {
+				uni.navigateTo({
+					url: '/pages/mine/profile'
 				});
 			},
 			goToSettings() {

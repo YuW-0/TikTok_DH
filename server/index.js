@@ -39,6 +39,26 @@ const AD_TOKEN_DAILY_LIMIT = 3;
 const CHAT_TOKEN_COST = 8;
 const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 
+const SAFE_SIGN_LEVELS = ['上上签', '上吉签', '中吉签', '中平签'];
+
+const parseJsonFromText = (rawText = '') => {
+  const text = String(rawText || '').trim();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) return null;
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch (innerErr) {
+      return null;
+    }
+  }
+};
+
 const todayDateStr = () => new Date().toISOString().split('T')[0];
 
 const randomInviteCode = () => {
@@ -221,7 +241,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 2. Draw Fortune
 app.post('/api/fortune/draw', async (req, res) => {
-  const { userId, theme } = req.body;
+  const { userId, theme, userProfile, signLevel } = req.body;
 
   try {
     // 1. Check user status
@@ -239,42 +259,84 @@ app.post('/api/fortune/draw', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Daily limit reached', code: 'LIMIT_REACHED' });
     }
 
-    // 2. Get random sign
-    // Since Supabase doesn't support random() easily in JS client without RPC, we'll fetch all IDs and pick one
-    // Ideally use a stored procedure or fetch count first.
-    // For simplicity with small dataset:
-    const { data: signs, error: signsError } = await supabase
-      .from('fortune_signs')
-      .select('id')
-      .eq('theme', theme); // Filter by theme if possible, but our schema has theme in signs table
-    
-    // Fallback if no signs for theme found (or if theme is generic)
-    let pool = signs;
-    if (!signs || signs.length === 0) {
-       const { data: allSigns } = await supabase.from('fortune_signs').select('id');
-       pool = allSigns;
+    // 2. Build compact prompt context for fast response
+    const safeTheme = String(theme || '综合').trim() || '综合';
+    const safeProfile = userProfile && typeof userProfile === 'object' ? userProfile : {};
+    const safeSignLevel = SAFE_SIGN_LEVELS.includes(String(signLevel || '').trim())
+      ? String(signLevel).trim()
+      : SAFE_SIGN_LEVELS[Math.floor(Math.random() * SAFE_SIGN_LEVELS.length)];
+
+    const profileParts = [];
+    if (safeProfile.name) profileParts.push(`姓名:${String(safeProfile.name).trim()}`);
+    if (safeProfile.gender) profileParts.push(`性别:${String(safeProfile.gender).trim()}`);
+    if (safeProfile.birthDate) profileParts.push(`生日:${String(safeProfile.birthDate).trim()}`);
+    if (safeProfile.birthHour) profileParts.push(`时辰:${String(safeProfile.birthHour).trim()}`);
+    const profileLine = profileParts.length ? profileParts.join('，') : '未填写';
+
+    const drawPrompt = [
+      `主题:${safeTheme}`,
+      `签等级(固定使用):${safeSignLevel}`,
+      `用户信息:${profileLine}`,
+      '请仅输出JSON对象，不要Markdown。',
+      '字段: sign_title, sign_text, basic_interpretation, full_interpretation, lucky_number, lucky_color。',
+      '要求:',
+      '1) sign_title 2-8字，不能出现“第X签”或序号。',
+      '2) sign_text 30-60字，古风但易懂。',
+      '3) basic_interpretation 35-80字。',
+      '4) full_interpretation 120-220字，给可执行建议，避免空话。',
+      '5) lucky_number 为1-99数字字符串。',
+      '6) lucky_color 为常见中文颜色词。',
+      '7) 不得出现下签/下下签，不得输出免责声明。'
+    ].join('\n');
+
+    const aiResp = await openai.chat.completions.create({
+      model: 'glm-4.6',
+      messages: [
+        {
+          role: 'system',
+          content: '你是精炼的中文古风签文生成助手。严格输出JSON，不输出多余文本。'
+        },
+        {
+          role: 'user',
+          content: drawPrompt
+        }
+      ],
+      temperature: 0.6,
+      max_tokens: 420,
+      enable_thinking: false,
+      stream: false
+    });
+
+    const rawText = (((aiResp || {}).choices || [])[0] || {}).message?.content || '';
+    const parsed = parseJsonFromText(rawText);
+    if (!parsed) {
+      throw new Error('Invalid AI draw response format');
     }
 
-    if (!pool || pool.length === 0) throw new Error('No fortune signs available');
+    const signPayload = {
+      sign_title: String(parsed.sign_title || '').trim() || '云开见月',
+      sign_level: safeSignLevel,
+      sign_text: String(parsed.sign_text || '').trim() || '云开月现，心定则路明。',
+      basic_interpretation: String(parsed.basic_interpretation || '').trim() || '守正心、稳步行，机缘会在行动中显现。',
+      full_interpretation: String(parsed.full_interpretation || '').trim() || '当下宜先立小目标，再逐步推进。与其反复犹豫，不如把握可控事项，边做边校正。',
+      theme: safeTheme,
+      lucky_number: String(parsed.lucky_number || '').trim() || String(Math.floor(Math.random() * 9) + 1),
+      lucky_color: String(parsed.lucky_color || '').trim() || '金色'
+    };
 
-    const randomIndex = Math.floor(Math.random() * pool.length);
-    const selectedSignId = pool[randomIndex].id;
-
-    // 3. Fetch full sign details
-    const { data: sign, error: signError } = await supabase
+    // 3. Persist generated sign as a record-backed sign row for history/ranking compatibility
+    const { data: sign, error: signInsertError } = await supabase
       .from('fortune_signs')
-      .select('*')
-      .eq('id', selectedSignId)
+      .insert(signPayload)
+      .select()
       .single();
-
-    if (signError) throw signError;
+    if (signInsertError || !sign) throw (signInsertError || new Error('Insert sign failed'));
 
     // 4. Record fortune
-    // 检查是否存在相同的 ai_interpretations
     const { data: record, error: recordError } = await supabase.from('fortune_records').insert({
       user_id: userId,
-      sign_id: selectedSignId,
-      theme: theme || sign.theme
+      sign_id: sign.id,
+      theme: safeTheme
     }).select().single();
 
     if (recordError) throw recordError;
@@ -438,7 +500,7 @@ app.post('/api/fortune/ai-interpret', async (req, res) => {
     
     console.log('Database save successful, ID:', data.id);
     
-    // 如果传递了 recordId，则关联该求签记录
+    // 如果传递了 recordId，则关联该测算记录
     if (signInfo.recordId) {
         console.log('Updating fortune record with interpretation ID...');
         const { error: updateError } = await supabase.from('fortune_records').update({
@@ -874,7 +936,7 @@ app.get('/api/fortune/ranking', async (req, res) => {
         .eq('user_id', user.id)
         .gte('created_at', today);
 
-      let bestSign = '暂未求签';
+      let bestSign = '暂未测算';
       let signScore = 0;
       
       if (records && records.length > 0) {

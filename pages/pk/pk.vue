@@ -45,14 +45,33 @@
 		<view class="footer-actions">
 			<button class="invite-btn" open-type="share">广邀善信比拼福运</button>
 		</view>
+
+		<!-- 积福小游戏 -->
+		<view class="games-section" id="games-section-anchor" :class="{ 'games-highlight': gamesHighlight }">
+			<view class="games-title-row">
+				<text class="games-title">积福小游戏</text>
+				<text class="games-subtitle">多玩多得，福分更高</text>
+			</view>
+			<view class="games-grid">
+				<view
+					class="game-item"
+					v-for="game in gameList"
+					:key="game.key"
+					@click="handleGameClick(game)"
+				>
+					<text class="game-name">{{ game.name }}</text>
+					<text class="game-desc">{{ game.desc }}</text>
+				</view>
+			</view>
+		</view>
 		
 		<!-- 悬浮木鱼 -->
-		<view class="floating-muyu" @click="goToMuyu">
+		<view class="floating-muyu" @click="scrollToGamesSection">
 			<view class="muyu-icon-wrapper">
 				<view class="muyu-icon-body"></view>
 				<view class="muyu-icon-stick"></view>
 			</view>
-			<text class="muyu-text">积福分</text>
+			<text class="muyu-text">直达小游戏</text>
 		</view>
 	</view>
 </template>
@@ -64,7 +83,34 @@
 		data() {
 			return {
 				myRank: null,
-				rankList: []
+				rankList: [],
+				gamesHighlight: false,
+				gameList: [
+					{
+						key: 'muyu',
+						name: '木鱼积福',
+						desc: '敲木鱼，快速积累福分',
+						url: '/pages/muyu/muyu'
+					},
+					{
+						key: 'fortune-flip',
+						name: '福袋翻翻乐',
+						desc: '翻开福袋，抽取今日好运',
+						url: '/pages/special/fortune-flip'
+					},
+					{
+						key: 'merit-match',
+						name: '功德连连看',
+						desc: '配对祈福符，连线赢福分',
+						url: '/pages/special/merit-match'
+					},
+					{
+						key: 'luck-wheel',
+						name: '福分罗盘',
+						desc: '轻触转盘，测一测今日福势',
+						url: '/pages/special/luck-wheel'
+					}
+				]
 			}
 		},
 		onShow() {
@@ -90,6 +136,42 @@
 			goToMuyu() {
 				uni.navigateTo({
 					url: '/pages/muyu/muyu'
+				});
+			},
+			scrollToGamesSection() {
+				const query = uni.createSelectorQuery().in(this);
+				query.select('.games-section').boundingClientRect();
+				query.selectViewport().scrollOffset();
+				query.exec((res) => {
+					const sectionRect = res && res[0];
+					const viewport = res && res[1];
+					if (!sectionRect || !viewport) return;
+
+					uni.pageScrollTo({
+						scrollTop: viewport.scrollTop + sectionRect.top - 10,
+						duration: 320
+					});
+
+					this.gamesHighlight = false;
+					setTimeout(() => {
+						this.gamesHighlight = true;
+					}, 360);
+					setTimeout(() => {
+						this.gamesHighlight = false;
+					}, 1600);
+				});
+			},
+			handleGameClick(game) {
+				if (!game || !game.url) {
+					uni.showToast({
+						title: '新玩法敬请期待',
+						icon: 'none'
+					});
+					return;
+				}
+
+				uni.navigateTo({
+					url: game.url
 				});
 			},
 			loadRanking() {
@@ -128,7 +210,7 @@
 						}
 						
 						// 查找今日最佳签
-						let bestSign = '暂未求签';
+						let bestSign = '暂未测算';
 						if (myIndex !== -1) {
 							bestSign = this.rankList[myIndex].bestSign;
 						} else {
@@ -320,6 +402,66 @@
 		font-size: 16px;
 		box-shadow: 0 4px 12px rgba(220, 20, 60, 0.4);
 	}
+
+	.games-section {
+		margin: 8px 20px 16px;
+		background: #fff;
+		border-radius: 12px;
+		padding: 14px;
+		border: 1px solid #f0dfbf;
+	}
+
+	.games-highlight {
+		animation: gamesPulse 0.55s ease-in-out 2;
+		box-shadow: 0 0 0 2px rgba(220, 20, 60, 0.25), 0 8px 20px rgba(220, 20, 60, 0.2);
+		border-color: #e17b8d;
+	}
+
+	.games-title-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 10px;
+	}
+
+	.games-title {
+		font-size: 15px;
+		color: #8B4513;
+		font-weight: bold;
+	}
+
+	.games-subtitle {
+		font-size: 12px;
+		color: #999;
+	}
+
+	.games-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		grid-gap: 10px;
+	}
+
+	.game-item {
+		background: #fff9ef;
+		border: 1px solid #f2dfbb;
+		border-radius: 10px;
+		padding: 10px;
+	}
+
+	.game-name {
+		display: block;
+		font-size: 14px;
+		font-weight: bold;
+		color: #5b2c06;
+		margin-bottom: 4px;
+	}
+
+	.game-desc {
+		display: block;
+		font-size: 12px;
+		line-height: 1.5;
+		color: #8b6a4d;
+	}
 	
 	.floating-muyu {
 		position: fixed;
@@ -336,6 +478,12 @@
 		0% { transform: translateY(0); }
 		50% { transform: translateY(-10px); }
 		100% { transform: translateY(0); }
+	}
+
+	@keyframes gamesPulse {
+		0% { transform: scale(1); }
+		50% { transform: scale(1.02); }
+		100% { transform: scale(1); }
 	}
 	
 	.muyu-icon-wrapper {
