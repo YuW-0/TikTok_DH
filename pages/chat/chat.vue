@@ -206,6 +206,12 @@
 					role: 'user',
 					content: message
 				});
+
+				this.messages.push({
+					role: 'ai',
+					content: ''
+				});
+				const aiIndex = this.messages.length - 1;
 				
 				this.inputMessage = '';
 				this.loading = true;
@@ -213,11 +219,23 @@
 				
 				// 3. 调用 API
 				const userId = this.userInfo ? this.userInfo.id : 'guest';
-				api.chatAsk(userId, message, history).then(res => {
-					this.messages.push({
-						role: 'ai',
-						content: res.response
-					});
+				let hasDelta = false;
+				api.chatAskStream(userId, message, history, {
+					onDelta: (delta, fullText) => {
+						if (typeof fullText !== 'string') return;
+						hasDelta = true;
+						this.loading = false;
+						if (this.messages[aiIndex]) {
+							this.messages[aiIndex].content = fullText;
+						}
+						this.scrollToBottom();
+					},
+					onDone: (fullText) => {
+						if (this.messages[aiIndex]) {
+							this.messages[aiIndex].content = String(fullText || this.messages[aiIndex].content || '贫道正在思量此事。');
+						}
+					}
+				}).then(() => {
 					this.pendingMessage = '';
 					this.loading = false;
 					this.refreshChatAssets();
@@ -227,13 +245,23 @@
 					// 次数不足：使用福缘珠购买问道次数
 					if (err.code === 'CHAT_TOKEN_REQUIRED') {
 						this.pendingMessage = message;
-						const last = this.messages[this.messages.length - 1];
-						if (last && last.role === 'user' && last.content === message) {
+						const aiMsg = this.messages[this.messages.length - 1];
+						if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {
+							this.messages.pop();
+						}
+						const userMsg = this.messages[this.messages.length - 1];
+						if (userMsg && userMsg.role === 'user' && userMsg.content === message) {
 							this.messages.pop();
 						}
 						this.inputMessage = message;
 						this.openPurchasePanel();
 					} else {
+						if (!hasDelta) {
+							const aiMsg = this.messages[this.messages.length - 1];
+							if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {
+								this.messages.pop();
+							}
+						}
 						this.messages.push({
 							role: 'ai',
 							content: '贫道正在闭关，暂无法回复。请善信稍后再试。'

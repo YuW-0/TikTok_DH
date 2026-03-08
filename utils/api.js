@@ -12,6 +12,25 @@ const shouldRetryNetwork = (err = {}) => {
 	return isAbortLikeError(err) || errMsg.includes('timeout') || errMsg.includes('network');
 };
 
+const decodeChunkBuffer = (() => {
+	const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null;
+	return (arrayBuffer) => {
+		if (!arrayBuffer) return '';
+		if (decoder) {
+			try {
+				return decoder.decode(new Uint8Array(arrayBuffer), { stream: true });
+			} catch (err) {
+				// Fallback below.
+			}
+		}
+		try {
+			return String.fromCharCode.apply(null, new Uint8Array(arrayBuffer));
+		} catch (err) {
+			return '';
+		}
+	};
+})();
+
 const request = (url, method, data = {}, options = {}) => {
 	return new Promise((resolve, reject) => {
 		const timeout = options.timeout || 120000;
@@ -142,6 +161,130 @@ export default {
 
 	// AI大师解惑（对话）
 	chatAsk: (userId, message, history) => request('/chat/ask', 'POST', { userId, message, history }),
+
+	// AI大师解惑（流式对话）
+	chatAskStream: (userId, message, history, handlers = {}) => {
+		const onDelta = typeof handlers.onDelta === 'function' ? handlers.onDelta : () => {};
+		const onDone = typeof handlers.onDone === 'function' ? handlers.onDone : () => {};
+		const onError = typeof handlers.onError === 'function' ? handlers.onError : () => {};
+
+		const parseAndDispatchLines = (raw, state) => {
+			state.buffer += raw;
+			let lineEnd = state.buffer.indexOf('\n');
+			while (lineEnd !== -1) {
+				const line = state.buffer.slice(0, lineEnd).trim();
+				state.buffer = state.buffer.slice(lineEnd + 1);
+				if (line) {
+					try {
+						const event = JSON.parse(line);
+						if (event.type === 'delta' && typeof event.content === 'string') {
+							state.fullText += event.content;
+							onDelta(event.content, state.fullText);
+						} else if (event.type === 'done') {
+							state.done = true;
+							onDone(state.fullText);
+						} else if (event.type === 'error') {
+							state.error = event;
+							onError(event);
+						}
+					} catch (err) {
+						// Ignore malformed partial lines.
+					}
+				}
+				lineEnd = state.buffer.indexOf('\n');
+			}
+		};
+
+		return new Promise((resolve, reject) => {
+			const state = {
+				fullText: '',
+				buffer: '',
+				done: false,
+				error: null,
+				settled: false
+			};
+
+			const settleResolve = () => {
+				if (state.settled) return;
+				state.settled = true;
+				resolve({ success: true, response: state.fullText, streamed: true });
+			};
+
+			const settleReject = (err) => {
+				if (state.settled) return;
+				state.settled = true;
+				reject(err);
+			};
+
+			const requestTask = uni.request({
+				url: getCurrentBaseUrl() + '/chat/ask-stream',
+				method: 'POST',
+				data: { userId, message, history },
+				header: {
+					'content-type': 'application/json',
+					accept: 'text/plain'
+				},
+				timeout: 300000,
+				enableChunked: true,
+				success: (res) => {
+					if (state.settled) return;
+					if (res.statusCode !== 200) {
+						const payload = res.data || { message: `请求失败(${res.statusCode})` };
+						onError(payload);
+						settleReject(payload);
+						return;
+					}
+
+					if (typeof res.data === 'string') {
+						parseAndDispatchLines(res.data, state);
+					}
+
+					if (state.error) {
+						settleReject(state.error);
+						return;
+					}
+
+					if (!state.done) {
+						onDone(state.fullText);
+					}
+					settleResolve();
+				},
+				fail: (err) => {
+					if (state.settled) return;
+					onError(err);
+					settleReject(err);
+				}
+			});
+
+			if (requestTask && typeof requestTask.onChunkReceived === 'function') {
+				requestTask.onChunkReceived((chunkRes) => {
+					if (state.settled) return;
+					const text = decodeChunkBuffer(chunkRes.data);
+					if (!text) return;
+					parseAndDispatchLines(text, state);
+					if (state.error) {
+						settleReject(state.error);
+					}
+				});
+			} else {
+				// Runtime does not support chunk callback, fallback to non-stream API.
+				request('/chat/ask', 'POST', { userId, message, history }, { timeout: 300000 })
+					.then((res) => {
+						if (state.settled) return;
+						const text = String(res.response || '');
+						onDelta(text, text);
+						onDone(text);
+						state.fullText = text;
+						settleResolve();
+					})
+					.catch((err) => {
+						if (state.settled) return;
+						onError(err);
+						settleReject(err);
+					});
+			}
+		});
+	},
 	
 	// 购买额外对话次数
 	buyChatChance: (userId, amount) => request('/payment/buy-chat-chance', 'POST', { userId, amount }),
