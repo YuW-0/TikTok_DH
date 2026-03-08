@@ -210,7 +210,26 @@
 				
 				// 3. 调用 API
 				const userId = this.userInfo ? this.userInfo.id : 'guest';
+				const streamTraceId = `chat-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 				let hasDelta = false;
+				const recoverFromLatestHistory = () => {
+					if (!userId || userId === 'guest') return Promise.resolve(false);
+					return api.getChatHistory(userId).then((historyRes) => {
+						const list = (historyRes && historyRes.messages) || [];
+						if (!Array.isArray(list) || !list.length) return false;
+						const lastAi = [...list].reverse().find((item) => item && item.role === 'ai' && String(item.content || '').trim());
+						if (!lastAi) return false;
+						if (this.messages[aiIndex] && this.messages[aiIndex].role === 'ai') {
+							this.messages[aiIndex].content = String(lastAi.content || '').trim();
+						} else {
+							this.messages.push({ role: 'ai', content: String(lastAi.content || '').trim() });
+						}
+						this.pendingMessage = '';
+						this.refreshChatAssets();
+						this.scrollToBottom();
+						return true;
+					}).catch(() => false);
+				};
 				const fallbackToNormalChat = () => {
 					return api.chatAsk(userId, message, history).then((res) => {
 						const text = String(res.response || '').trim() || '贫道正在思量此事。';
@@ -225,6 +244,7 @@
 						this.scrollToBottom();
 					});
 				};
+				console.info('[chat] sendMessage stream start', { streamTraceId, userId, historySize: history.length });
 				api.chatAskStream(userId, message, history, {
 					onDelta: (delta, fullText) => {
 						if (typeof fullText !== 'string') return;
@@ -241,24 +261,29 @@
 						}
 					}
 				}).then(() => {
+					console.info('[chat] stream resolved', { streamTraceId, hasDelta });
 					this.pendingMessage = '';
 					this.loading = false;
 					this.refreshChatAssets();
 					this.scrollToBottom();
 				}).catch(err => {
 					this.loading = false;
+					console.warn('[chat] stream rejected', { streamTraceId, err, hasDelta });
 					const aiMsgAtIndex = this.messages[aiIndex];
 					const hasRenderedAiText = Boolean(aiMsgAtIndex && aiMsgAtIndex.role === 'ai' && String(aiMsgAtIndex.content || '').trim());
 					if (!hasDelta) {
 						const streamFailed = String(err && err.code ? err.code : '').includes('STREAM') || String(err && err.message ? err.message : '').toLowerCase().includes('stream');
 						if (streamFailed) {
 							fallbackToNormalChat().catch(() => {
-								const aiMsg = this.messages[this.messages.length - 1];
-								if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {
-									this.messages.pop();
-								}
-								this.messages.push({ role: 'ai', content: '大师正在打坐，请稍后再试。' });
-								this.scrollToBottom();
+								recoverFromLatestHistory().then((recovered) => {
+									if (recovered) return;
+									const aiMsg = this.messages[this.messages.length - 1];
+									if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {
+										this.messages.pop();
+									}
+									this.messages.push({ role: 'ai', content: '大师正在打坐，请稍后再试。' });
+									this.scrollToBottom();
+								});
 							});
 							return;
 						}

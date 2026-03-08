@@ -1635,11 +1635,26 @@ app.post('/api/chat/ask', async (req, res) => {
 
 // 9.1 Master Chat Stream (Incremental output, save once on completion)
 app.post('/api/chat/ask-stream', async (req, res) => {
-  const { userId, message, history } = req.body;
+  const { userId, message, history, streamTraceId } = req.body;
+  const traceId = streamTraceId || `srv-chat-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  let aiResponse = '';
+  let hasStreamOutput = false;
+  let hasDone = false;
 
   const writeChunk = (payload) => {
+    hasStreamOutput = true;
+    if (payload && payload.type === 'done') {
+      hasDone = true;
+    }
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
+
+  console.info('[chat-stream] start', {
+    traceId,
+    userId,
+    messageLength: String(message || '').length,
+    historySize: Array.isArray(history) ? history.length : 0
+  });
 
   try {
     const { data: user, error: userError } = await supabase
@@ -1736,7 +1751,6 @@ app.post('/api/chat/ask-stream', async (req, res) => {
       max_tokens: 1000,
     });
 
-    let aiResponse = '';
     for await (const chunk of stream) {
       if (!chunk?.choices?.length) continue;
       const delta = chunk.choices[0].delta || {};
@@ -1747,42 +1761,65 @@ app.post('/api/chat/ask-stream', async (req, res) => {
     }
 
     aiResponse = aiResponse.trim().replace(/^\s+/, '');
+    console.info('[chat-stream] generation finished', { traceId, aiLength: aiResponse.length });
     if (!aiResponse) {
       writeChunk({ type: 'error', code: 'EMPTY_RESPONSE', message: '大师正在打坐，请稍后再试' });
+      console.warn('[chat-stream] empty response', { traceId });
       return res.end();
     }
 
-    const { error: saveError } = await supabase.from('chat_messages').insert([
-      { user_id: userId, role: 'user', content: message },
-      { user_id: userId, role: 'ai', content: aiResponse }
-    ]);
-    if (saveError) {
-      console.error('Failed to save chat history:', saveError);
+    try {
+      const { error: saveError } = await supabase.from('chat_messages').insert([
+        { user_id: userId, role: 'user', content: message },
+        { user_id: userId, role: 'ai', content: aiResponse }
+      ]);
+      if (saveError) {
+        console.error('[chat-stream] failed to save chat history', { traceId, saveError });
+      } else {
+        console.info('[chat-stream] chat history saved', { traceId });
+      }
+    } catch (saveErr) {
+      console.error('[chat-stream] save chat history exception', { traceId, saveErr });
     }
 
-    if (quota) {
-      let updateData = {};
-      const todayAfter = new Date().toISOString().split('T')[0];
-      if (quota.last_chat_date !== todayAfter) {
-        updateData = { daily_count: 1, last_chat_date: todayAfter };
-      } else if ((quota.daily_count || 0) < limit) {
-        updateData = { daily_count: (quota.daily_count || 0) + 1 };
-      } else if (quota.extra_chances > 0) {
-        updateData = { extra_chances: quota.extra_chances - 1 };
+    try {
+      if (quota) {
+        let updateData = {};
+        const todayAfter = new Date().toISOString().split('T')[0];
+        if (quota.last_chat_date !== todayAfter) {
+          updateData = { daily_count: 1, last_chat_date: todayAfter };
+        } else if ((quota.daily_count || 0) < limit) {
+          updateData = { daily_count: (quota.daily_count || 0) + 1 };
+        } else if (quota.extra_chances > 0) {
+          updateData = { extra_chances: quota.extra_chances - 1 };
+        }
+        await supabase.from('chat_quotas').update(updateData).eq('user_id', userId);
+      } else {
+        await supabase.from('chat_quotas').insert({ user_id: userId, daily_count: 1, last_chat_date: new Date() });
       }
-      await supabase.from('chat_quotas').update(updateData).eq('user_id', userId);
-    } else {
-      await supabase.from('chat_quotas').insert({ user_id: userId, daily_count: 1, last_chat_date: new Date() });
+      console.info('[chat-stream] quota updated', { traceId });
+    } catch (quotaErr) {
+      console.error('[chat-stream] quota update failed', { traceId, quotaErr });
     }
 
     writeChunk({ type: 'done' });
     res.write('data: [DONE]\n\n');
+    console.info('[chat-stream] done sent', { traceId });
     return res.end();
   } catch (err) {
-    console.error('Chat stream error:', err);
+    console.error('[chat-stream] fatal error', { traceId, err, aiLength: String(aiResponse || '').length, hasStreamOutput, hasDone });
     if (!res.headersSent) {
       return res.status(500).json({ success: false, message: '大师正在打坐，请稍后再试' });
     }
+
+    if (String(aiResponse || '').trim()) {
+      if (!hasDone) {
+        writeChunk({ type: 'done' });
+        res.write('data: [DONE]\n\n');
+      }
+      return res.end();
+    }
+
     writeChunk({ type: 'error', code: 'STREAM_FAILED', message: '大师正在打坐，请稍后再试' });
     return res.end();
   }

@@ -337,6 +337,7 @@ export default {
 		const onDelta = typeof handlers.onDelta === 'function' ? handlers.onDelta : () => {};
 		const onDone = typeof handlers.onDone === 'function' ? handlers.onDone : () => {};
 		const onError = typeof handlers.onError === 'function' ? handlers.onError : () => {};
+		const streamTraceId = `chatstream-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
 		const parseAndDispatchLines = (raw, state) => {
 			state.buffer += raw;
@@ -374,6 +375,7 @@ export default {
 		};
 
 		return new Promise((resolve, reject) => {
+			console.info('[api.chatAskStream] start', { streamTraceId, userId, historySize: Array.isArray(history) ? history.length : 0 });
 			const state = {
 				fullText: '',
 				buffer: '',
@@ -385,19 +387,21 @@ export default {
 			const settleResolve = () => {
 				if (state.settled) return;
 				state.settled = true;
+				console.info('[api.chatAskStream] resolved', { streamTraceId, done: state.done, fullTextLength: state.fullText.length });
 				resolve({ success: true, response: state.fullText, streamed: true });
 			};
 
 			const settleReject = (err) => {
 				if (state.settled) return;
 				state.settled = true;
+				console.warn('[api.chatAskStream] rejected', { streamTraceId, err, fullTextLength: state.fullText.length, done: state.done });
 				reject(err);
 			};
 
 			const requestTask = uni.request({
 				url: getCurrentBaseUrl() + '/chat/ask-stream',
 				method: 'POST',
-				data: { userId, message, history },
+				data: { userId, message, history, streamTraceId },
 				header: {
 					'content-type': 'application/json',
 					accept: 'text/plain'
@@ -406,6 +410,7 @@ export default {
 				enableChunked: true,
 				success: (res) => {
 					if (state.settled) return;
+					console.info('[api.chatAskStream] request success callback', { streamTraceId, statusCode: res.statusCode });
 					if (res.statusCode !== 200) {
 						const payload = normalizeErrorPayload(res.data, {
 							statusCode: res.statusCode,
@@ -421,6 +426,7 @@ export default {
 					}
 
 					if (state.error) {
+						console.warn('[api.chatAskStream] state error after success', { streamTraceId, error: state.error });
 						settleReject(state.error);
 						return;
 					}
@@ -432,6 +438,7 @@ export default {
 				},
 				fail: (err) => {
 					if (state.settled) return;
+					console.warn('[api.chatAskStream] request fail callback', { streamTraceId, err, fullTextLength: state.fullText.length });
 					if (state.fullText) {
 						onDone(state.fullText);
 						settleResolve();
@@ -443,12 +450,14 @@ export default {
 			});
 
 			if (requestTask && typeof requestTask.onChunkReceived === 'function') {
+				console.info('[api.chatAskStream] chunk mode enabled', { streamTraceId });
 				requestTask.onChunkReceived((chunkRes) => {
 					if (state.settled) return;
 					const text = decodeChunkBuffer(chunkRes.data);
 					if (!text) return;
 					parseAndDispatchLines(text, state);
 					if (state.error) {
+						console.warn('[api.chatAskStream] stream event error', { streamTraceId, error: state.error });
 						settleReject(state.error);
 						return;
 					}
@@ -457,6 +466,7 @@ export default {
 					}
 				});
 			} else {
+				console.warn('[api.chatAskStream] chunk mode unavailable, fallback to non-stream', { streamTraceId });
 				// Runtime does not support chunk callback, fallback to non-stream API.
 				if (requestTask && typeof requestTask.abort === 'function') {
 					requestTask.abort();
