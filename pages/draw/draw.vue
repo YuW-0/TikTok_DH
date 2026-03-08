@@ -103,20 +103,54 @@
 				if (!profile) return false;
 				return Boolean(profile.name && profile.gender && profile.birthDate && profile.birthHour);
 			},
-			handleDrawSuccess(res) {
+			handleDrawSuccess(res, popupOpened = false) {
 				setTimeout(() => {
 					this.isShaking = false;
 					this.stopHintRolling();
-					this.result = { ...res.sign, recordId: res.recordId };
-					this.$refs.signResult.open();
-				}, 500);
+					this.result = {
+						...this.result,
+						...res.sign,
+						recordId: res.recordId
+					};
+					if (!popupOpened) {
+						this.$refs.signResult.open();
+					}
+				}, popupOpened ? 0 : 500);
 			},
 			requestDraw(userId, userProfile, signLevel) {
-				api.drawFortune(userId, {
+				const themeInfo = {
 					themeType: this.themeType,
 					themeName: this.themeName
-				}, userProfile, signLevel).then((res) => {
-					this.handleDrawSuccess(res);
+				};
+
+				let popupOpened = false;
+				this.result = {
+					sign_level: signLevel,
+					sign_title: '',
+					sign_text: '',
+					basic_interpretation: '',
+					full_interpretation: '',
+					theme: this.themeName,
+					lucky_number: '',
+					lucky_color: ''
+				};
+
+				api.drawFortuneStream(userId, themeInfo, userProfile, signLevel, {
+					onPartial: (partialSign) => {
+						this.result = {
+							...this.result,
+							...partialSign
+						};
+
+						if (!popupOpened && (partialSign.sign_title || partialSign.sign_text || partialSign.basic_interpretation)) {
+							popupOpened = true;
+							this.isShaking = false;
+							this.stopHintRolling();
+							this.$refs.signResult.open();
+						}
+					}
+				}).then((res) => {
+					this.handleDrawSuccess(res, popupOpened);
 				}).catch((err) => {
 					this.isShaking = false;
 					this.stopHintRolling();

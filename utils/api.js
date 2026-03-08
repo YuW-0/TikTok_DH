@@ -116,6 +116,142 @@ export default {
 		userProfile,
 		signLevel
 	}),
+
+	// 测算（流式）
+	drawFortuneStream: (userId, themeInfo, userProfile, signLevel, handlers = {}) => {
+		const onPartial = typeof handlers.onPartial === 'function' ? handlers.onPartial : () => {};
+		const onDone = typeof handlers.onDone === 'function' ? handlers.onDone : () => {};
+		const onError = typeof handlers.onError === 'function' ? handlers.onError : () => {};
+
+		const parseAndDispatchLines = (raw, state) => {
+			state.buffer += raw;
+			let lineEnd = state.buffer.indexOf('\n');
+			while (lineEnd !== -1) {
+				const line = state.buffer.slice(0, lineEnd).trim();
+				state.buffer = state.buffer.slice(lineEnd + 1);
+				if (line) {
+					if (line === 'data: [DONE]') {
+						state.done = true;
+						lineEnd = state.buffer.indexOf('\n');
+						continue;
+					}
+
+					const payloadLine = line.startsWith('data:') ? line.slice(5).trim() : line;
+					try {
+						const event = JSON.parse(payloadLine);
+						if (event.type === 'partial' && event.sign) {
+							state.partialSign = { ...state.partialSign, ...event.sign };
+							onPartial(state.partialSign);
+						} else if (event.type === 'done') {
+							state.done = true;
+							state.final = { sign: event.sign, recordId: event.recordId };
+							onDone(state.final);
+						} else if (event.type === 'error') {
+							state.error = event;
+							onError(event);
+						}
+					} catch (err) {
+						// Ignore malformed partial lines.
+					}
+				}
+				lineEnd = state.buffer.indexOf('\n');
+			}
+		};
+
+		return new Promise((resolve, reject) => {
+			const state = {
+				buffer: '',
+				partialSign: {},
+				final: null,
+				done: false,
+				error: null,
+				settled: false
+			};
+
+			const settleResolve = (payload) => {
+				if (state.settled) return;
+				state.settled = true;
+				resolve(payload);
+			};
+
+			const settleReject = (err) => {
+				if (state.settled) return;
+				state.settled = true;
+				reject(err);
+			};
+
+			const requestTask = uni.request({
+				url: getCurrentBaseUrl() + '/fortune/draw-stream',
+				method: 'POST',
+				data: { userId, themeInfo, userProfile, signLevel },
+				header: {
+					'content-type': 'application/json',
+					accept: 'text/event-stream'
+				},
+				timeout: 60000,
+				enableChunked: true,
+				success: (res) => {
+					if (state.settled) return;
+					if (res.statusCode !== 200) {
+						const payload = res.data || { message: `请求失败(${res.statusCode})` };
+						onError(payload);
+						settleReject(payload);
+						return;
+					}
+
+					if (typeof res.data === 'string') {
+						parseAndDispatchLines(res.data, state);
+					}
+
+					if (state.error) {
+						settleReject(state.error);
+						return;
+					}
+
+					if (state.final) {
+						settleResolve({ success: true, ...state.final, streamed: true });
+						return;
+					}
+
+					// Some runtimes may not emit chunk callbacks reliably; fallback to normal API result.
+					request('/fortune/draw', 'POST', { userId, themeInfo, userProfile, signLevel })
+						.then((normalRes) => settleResolve(normalRes))
+						.catch((err) => settleReject(err));
+				},
+				fail: (err) => {
+					if (state.settled) return;
+					onError(err);
+					settleReject(err);
+				}
+			});
+
+			if (requestTask && typeof requestTask.onChunkReceived === 'function') {
+				requestTask.onChunkReceived((chunkRes) => {
+					if (state.settled) return;
+					const text = decodeChunkBuffer(chunkRes.data);
+					if (!text) return;
+					parseAndDispatchLines(text, state);
+					if (state.error) {
+						settleReject(state.error);
+						return;
+					}
+					if (state.final) {
+						settleResolve({ success: true, ...state.final, streamed: true });
+					}
+				});
+			} else {
+				if (requestTask && typeof requestTask.abort === 'function') {
+					requestTask.abort();
+				}
+				request('/fortune/draw', 'POST', { userId, themeInfo, userProfile, signLevel })
+					.then((normalRes) => settleResolve(normalRes))
+					.catch((err) => {
+						onError(err);
+						settleReject(err);
+					});
+			}
+		});
+	},
 	
 	// AI深度解读
 	aiInterpret: (userId, signInfo, userInfo) => request('/fortune/ai-interpret', 'POST', { userId, signInfo, userInfo }, { timeout: 300000 }),

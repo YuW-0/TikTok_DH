@@ -40,7 +40,7 @@ const CHAT_TOKEN_COST = 8;
 const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 
 const SAFE_SIGN_LEVELS = ['上上签', '上吉签', '中吉签', '中平签'];
-const DRAW_MODEL = 'glm-4.5';
+const DRAW_MODEL = 'glm-4.5-air';
 const DRAW_TEMPERATURE = 0.68;
 const DRAW_MAX_TOKENS = 240;
 const DRAW_TIMEOUT_MS = 18000;
@@ -88,15 +88,29 @@ const parseJsonFromText = (rawText = '') => {
   }
 };
 
+const extractTagValue = (raw = '', tag = '', allowPartial = false) => {
+  const safeRaw = String(raw || '');
+  const openTag = `<${tag}>`;
+  const closeTag = `</${tag}>`;
+  const start = safeRaw.indexOf(openTag);
+  if (start === -1) return '';
+  const bodyStart = start + openTag.length;
+  const end = safeRaw.indexOf(closeTag, bodyStart);
+  if (end !== -1) {
+    return safeRaw.slice(bodyStart, end).trim();
+  }
+  return allowPartial ? safeRaw.slice(bodyStart).trim() : '';
+};
+
 const requestDrawJson = async (messages) => {
-  let aiResp;
+  let stream;
   try {
-    aiResp = await openai.chat.completions.create({
+    stream = await openai.chat.completions.create({
       model: DRAW_MODEL,
       messages,
       temperature: DRAW_TEMPERATURE,
       max_tokens: DRAW_MAX_TOKENS,
-      stream: false,
+      stream: true,
       enable_thinking: false,
       timeout: DRAW_TIMEOUT_MS
     });
@@ -107,7 +121,19 @@ const requestDrawJson = async (messages) => {
     throw wrapped;
   }
 
-  const rawText = getMessageText((((aiResp || {}).choices || [])[0] || {}).message?.content);
+  let rawText = '';
+  try {
+    for await (const chunk of stream) {
+      if (!chunk?.choices?.length) continue;
+      const delta = chunk.choices[0].delta || {};
+      rawText += getMessageText(delta.content);
+    }
+  } catch (err) {
+    const message = String(err?.message || 'unknown stream error');
+    const wrapped = new Error(`Draw AI stream read failed: ${message}`);
+    wrapped.code = 'DRAW_AI_REQUEST_FAILED';
+    throw wrapped;
+  }
 
   const parsed = parseJsonFromText(rawText);
   if (!parsed) {
@@ -117,6 +143,52 @@ const requestDrawJson = async (messages) => {
   }
 
   return parsed;
+};
+
+const buildDrawPrompt = ({ safeThemeType, safeThemeName, safeSignLevel, profileLine, drawNonce, useTagFormat = false }) => {
+  if (useTagFormat) {
+    return [
+      `主题类型:${safeThemeType}`,
+      `主题名称:${safeThemeName}`,
+      `签等级(固定使用):${safeSignLevel}`,
+      `用户信息:${profileLine}`,
+      `请求标识:${drawNonce}`,
+      '请仅输出以下标签，不要输出JSON与Markdown：',
+      '<sign_title></sign_title>',
+      '<sign_text></sign_text>',
+      '<basic_interpretation></basic_interpretation>',
+      '<full_interpretation></full_interpretation>',
+      '<lucky_number></lucky_number>',
+      '<lucky_color></lucky_color>',
+      '要求:',
+      '1) sign_title 2-8字，不能出现“第X签”或序号。',
+      '2) sign_text 20-32字，古风但易懂。',
+      '3) basic_interpretation 24-42字。',
+      '4) full_interpretation 60-100字，给可执行建议，避免空话。',
+      '5) lucky_number 为1-99数字字符串。',
+      '6) lucky_color 为常见中文颜色词。',
+      '7) 不得出现下签/下下签，不得输出免责声明。'
+    ].join('\n');
+  }
+
+  return [
+    `主题类型:${safeThemeType}`,
+    `主题名称:${safeThemeName}`,
+    `签等级(固定使用):${safeSignLevel}`,
+    `用户信息:${profileLine}`,
+    `请求标识:${drawNonce}`,
+    '请仅输出JSON对象，不要Markdown。',
+    '字段: sign_title, sign_text, basic_interpretation, full_interpretation, lucky_number, lucky_color。',
+    '要求:',
+    '0) 所有内容必须围绕“主题名称”展开，不可泛化到其他主题。',
+    '1) sign_title 2-8字，不能出现“第X签”或序号。',
+    '2) sign_text 20-32字，古风但易懂。',
+    '3) basic_interpretation 24-42字。',
+    '4) full_interpretation 60-100字，给可执行建议，避免空话。',
+    '5) lucky_number 为1-99数字字符串。',
+    '6) lucky_color 为常见中文颜色词。',
+    '7) 不得出现下签/下下签，不得输出免责声明。'
+  ].join('\n');
 };
 
 const parseAiDrawCoreFields = (parsed = {}) => {
@@ -365,24 +437,7 @@ app.post('/api/fortune/draw', async (req, res) => {
     const profileLine = profileParts.length ? profileParts.join('，') : '未填写';
     const drawNonce = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
-    const drawPrompt = [
-      `主题类型:${safeThemeType}`,
-      `主题名称:${safeThemeName}`,
-      `签等级(固定使用):${safeSignLevel}`,
-      `用户信息:${profileLine}`,
-      `请求标识:${drawNonce}`,
-      '请仅输出JSON对象，不要Markdown。',
-      '字段: sign_title, sign_text, basic_interpretation, full_interpretation, lucky_number, lucky_color。',
-      '要求:',
-      '0) 所有内容必须围绕“主题名称”展开，不可泛化到其他主题。',
-      '1) sign_title 2-8字，不能出现“第X签”或序号。',
-      '2) sign_text 20-32字，古风但易懂。',
-      '3) basic_interpretation 24-42字。',
-      '4) full_interpretation 60-100字，给可执行建议，避免空话。',
-      '5) lucky_number 为1-99数字字符串。',
-      '6) lucky_color 为常见中文颜色词。',
-      '7) 不得出现下签/下下签，不得输出免责声明。'
-    ].join('\n');
+    const drawPrompt = buildDrawPrompt({ safeThemeType, safeThemeName, safeSignLevel, profileLine, drawNonce });
 
     const messages = [
       {
@@ -443,6 +498,178 @@ app.post('/api/fortune/draw', async (req, res) => {
       return res.status(502).json({ success: false, code: err.code, message: err.message });
     }
     res.status(500).json({ success: false, code: 'DRAW_INTERNAL_ERROR', message: 'Failed to draw fortune' });
+  }
+});
+
+// 2.1 Draw Fortune Stream (SSE partial updates, save once completed)
+app.post('/api/fortune/draw-stream', async (req, res) => {
+  const { userId, themeInfo, userProfile, signLevel } = req.body || {};
+
+  const writeChunk = (payload) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  try {
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Missing userId' });
+    }
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+
+    const limit = user.vip_level > 0 ? 999 : 1;
+    if (user.daily_fortune_count >= limit) {
+      return res.status(403).json({ success: false, message: 'Daily limit reached', code: 'LIMIT_REACHED' });
+    }
+
+    const safeThemeType = String((themeInfo && themeInfo.themeType) || 'general').trim() || 'general';
+    const safeThemeName = String((themeInfo && themeInfo.themeName) || '综合').trim() || '综合';
+    const safeTheme = safeThemeName;
+    const safeProfile = userProfile && typeof userProfile === 'object' ? userProfile : {};
+    const safeSignLevel = SAFE_SIGN_LEVELS.includes(String(signLevel || '').trim())
+      ? String(signLevel).trim()
+      : SAFE_SIGN_LEVELS[Math.floor(Math.random() * SAFE_SIGN_LEVELS.length)];
+
+    const profileParts = [];
+    if (safeProfile.name) profileParts.push(`姓名:${String(safeProfile.name).trim()}`);
+    if (safeProfile.gender) profileParts.push(`性别:${String(safeProfile.gender).trim()}`);
+    if (safeProfile.birthDate) profileParts.push(`生日:${String(safeProfile.birthDate).trim()}`);
+    if (safeProfile.birthHour) profileParts.push(`时辰:${String(safeProfile.birthHour).trim()}`);
+    const profileLine = profileParts.length ? profileParts.join('，') : '未填写';
+    const drawNonce = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+
+    const drawPrompt = buildDrawPrompt({
+      safeThemeType,
+      safeThemeName,
+      safeSignLevel,
+      profileLine,
+      drawNonce,
+      useTagFormat: true
+    });
+
+    const messages = [
+      { role: 'system', content: '你是精炼的中文古风签文生成助手。严格按标签输出，不输出多余文本。' },
+      { role: 'user', content: drawPrompt }
+    ];
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
+
+    const stream = await openai.chat.completions.create({
+      model: DRAW_MODEL,
+      messages,
+      temperature: DRAW_TEMPERATURE,
+      max_tokens: DRAW_MAX_TOKENS,
+      stream: true,
+      enable_thinking: false,
+      timeout: DRAW_TIMEOUT_MS
+    });
+
+    let rawText = '';
+    const lastPartial = {
+      sign_title: '',
+      sign_text: '',
+      basic_interpretation: '',
+      full_interpretation: '',
+      lucky_number: '',
+      lucky_color: ''
+    };
+
+    for await (const chunk of stream) {
+      if (!chunk?.choices?.length) continue;
+      const delta = chunk.choices[0].delta || {};
+      const deltaText = getMessageText(delta.content);
+      if (!deltaText) continue;
+
+      rawText += deltaText;
+
+      const partial = {
+        sign_title: extractTagValue(rawText, 'sign_title', true),
+        sign_text: extractTagValue(rawText, 'sign_text', true),
+        basic_interpretation: extractTagValue(rawText, 'basic_interpretation', true),
+        full_interpretation: extractTagValue(rawText, 'full_interpretation', true),
+        lucky_number: extractTagValue(rawText, 'lucky_number', true),
+        lucky_color: extractTagValue(rawText, 'lucky_color', true)
+      };
+
+      const changed = Object.keys(partial).some((key) => partial[key] !== lastPartial[key]);
+      if (changed) {
+        Object.assign(lastPartial, partial);
+        writeChunk({ type: 'partial', sign: { ...partial, sign_level: safeSignLevel, theme: safeTheme } });
+      }
+    }
+
+    const parsed = {
+      sign_title: extractTagValue(rawText, 'sign_title', false),
+      sign_text: extractTagValue(rawText, 'sign_text', false),
+      basic_interpretation: extractTagValue(rawText, 'basic_interpretation', false),
+      full_interpretation: extractTagValue(rawText, 'full_interpretation', false),
+      lucky_number: extractTagValue(rawText, 'lucky_number', false),
+      lucky_color: extractTagValue(rawText, 'lucky_color', false)
+    };
+
+    const core = parseAiDrawCoreFields(parsed);
+    if (!core.isValid) {
+      writeChunk({ type: 'error', code: 'DRAW_AI_PARSE_FAILED', message: 'Draw AI response incomplete, please retry' });
+      res.write('data: [DONE]\n\n');
+      return res.end();
+    }
+
+    const signPayload = {
+      sign_title: core.aiSignTitle,
+      sign_level: safeSignLevel,
+      sign_text: String(parsed.sign_text || '').trim() || '云开月现，心定则路明。',
+      basic_interpretation: String(parsed.basic_interpretation || '').trim() || '守正心、稳步行，机缘会在行动中显现。',
+      full_interpretation: String(parsed.full_interpretation || '').trim() || '当下宜先立小目标，再逐步推进。与其反复犹豫，不如把握可控事项，边做边校正。',
+      theme: safeTheme,
+      lucky_number: core.aiLuckyNumber,
+      lucky_color: core.aiLuckyColor
+    };
+
+    const { data: sign, error: signInsertError } = await supabase
+      .from('fortune_signs')
+      .insert(signPayload)
+      .select()
+      .single();
+    if (signInsertError || !sign) {
+      throw (signInsertError || new Error('Insert sign failed'));
+    }
+
+    const { data: record, error: recordError } = await supabase
+      .from('fortune_records')
+      .insert({ user_id: userId, sign_id: sign.id, theme: safeTheme })
+      .select()
+      .single();
+    if (recordError) throw recordError;
+
+    await supabase
+      .from('users')
+      .update({ daily_fortune_count: user.daily_fortune_count + 1 })
+      .eq('id', userId);
+
+    writeChunk({ type: 'done', sign, recordId: record.id });
+    res.write('data: [DONE]\n\n');
+    return res.end();
+  } catch (err) {
+    console.error('Draw fortune stream error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, code: 'DRAW_INTERNAL_ERROR', message: 'Failed to draw fortune' });
+    }
+    writeChunk({ type: 'error', code: 'DRAW_INTERNAL_ERROR', message: 'Failed to draw fortune' });
+    res.write('data: [DONE]\n\n');
+    return res.end();
   }
 });
 
