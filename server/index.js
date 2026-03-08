@@ -40,9 +40,9 @@ const CHAT_TOKEN_COST = 8;
 const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 
 const SAFE_SIGN_LEVELS = ['上上签', '上吉签', '中吉签', '中平签'];
-const DRAW_MODEL = 'glm-4.6';
+const DRAW_MODEL = 'glm-4.5';
 const DRAW_TEMPERATURE = 0.68;
-const DRAW_MAX_TOKENS = 320;
+const DRAW_MAX_TOKENS = 240;
 const DRAW_TIMEOUT_MS = 18000;
 
 const getMessageText = (content) => {
@@ -97,6 +97,7 @@ const requestDrawJson = async (messages) => {
       temperature: DRAW_TEMPERATURE,
       max_tokens: DRAW_MAX_TOKENS,
       stream: false,
+      enable_thinking: false,
       timeout: DRAW_TIMEOUT_MS
     });
   } catch (err) {

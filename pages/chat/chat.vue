@@ -253,9 +253,10 @@
 								this.messages.pop();
 							}
 						}
+						const fallbackText = String(err && err.message ? err.message : '').trim() || '大师正在打坐，请稍后再试。';
 						this.messages.push({
 							role: 'ai',
-							content: '贫道正在闭关，暂无法回复。请善信稍后再试。'
+							content: fallbackText
 						});
 						this.scrollToBottom();
 					}
