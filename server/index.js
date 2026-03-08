@@ -42,9 +42,34 @@ const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 const SAFE_SIGN_LEVELS = ['上上签', '上吉签', '中吉签', '中平签'];
 const DRAW_MODEL = 'glm-4.5-air';
 
+const getMessageText = (content) => {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part.text === 'string') return part.text;
+      return '';
+    }).join('');
+  }
+  if (typeof content === 'object' && typeof content.text === 'string') {
+    return content.text;
+  }
+  return '';
+};
+
 const parseJsonFromText = (rawText = '') => {
   const text = String(rawText || '').trim();
   if (!text) return null;
+
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch && fencedMatch[1]) {
+    try {
+      return JSON.parse(fencedMatch[1].trim());
+    } catch (err) {
+      // Keep trying with other strategies below.
+    }
+  }
 
   try {
     return JSON.parse(text);
@@ -61,18 +86,28 @@ const parseJsonFromText = (rawText = '') => {
 };
 
 const requestDrawJson = async (messages) => {
-  const aiResp = await openai.chat.completions.create({
-    model: DRAW_MODEL,
-    messages,
-    temperature: 0.82,
-    max_tokens: 520,
-    stream: false
-  });
+  let aiResp;
+  try {
+    aiResp = await openai.chat.completions.create({
+      model: DRAW_MODEL,
+      messages,
+      temperature: 0.82,
+      max_tokens: 520,
+      stream: false
+    });
+  } catch (err) {
+    const message = String(err?.message || 'unknown AI error');
+    const wrapped = new Error(`Draw AI request failed: ${message}`);
+    wrapped.code = 'DRAW_AI_REQUEST_FAILED';
+    throw wrapped;
+  }
 
-  const rawText = (((aiResp || {}).choices || [])[0] || {}).message?.content || '';
+  const rawText = getMessageText((((aiResp || {}).choices || [])[0] || {}).message?.content);
   const parsed = parseJsonFromText(rawText);
   if (!parsed) {
-    throw new Error(`Invalid AI draw response format from model: ${DRAW_MODEL}`);
+    const wrapped = new Error(`Draw AI JSON parse failed from model: ${DRAW_MODEL}`);
+    wrapped.code = 'DRAW_AI_PARSE_FAILED';
+    throw wrapped;
   }
 
   return parsed;
@@ -411,7 +446,10 @@ app.post('/api/fortune/draw', async (req, res) => {
 
   } catch (err) {
     console.error('Draw fortune error:', err);
-    res.status(500).json({ success: false, message: 'Failed to draw fortune' });
+    if (err && (err.code === 'DRAW_AI_REQUEST_FAILED' || err.code === 'DRAW_AI_PARSE_FAILED')) {
+      return res.status(502).json({ success: false, code: err.code, message: err.message });
+    }
+    res.status(500).json({ success: false, code: 'DRAW_INTERNAL_ERROR', message: 'Failed to draw fortune' });
   }
 });
 
