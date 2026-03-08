@@ -40,6 +40,7 @@ const CHAT_TOKEN_COST = 8;
 const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 
 const SAFE_SIGN_LEVELS = ['上上签', '上吉签', '中吉签', '中平签'];
+const DRAW_MODEL_CANDIDATES = ['glm-4.5-air', 'glm-4.5', 'glm-4.6'];
 
 const parseJsonFromText = (rawText = '') => {
   const text = String(rawText || '').trim();
@@ -57,6 +58,54 @@ const parseJsonFromText = (rawText = '') => {
       return null;
     }
   }
+};
+
+const buildLocalFallbackSign = ({ themeName, signLevel }) => {
+  const titles = ['云开见月', '顺势而行', '清心得路', '静候佳音', '守正迎吉'];
+  const colors = ['金色', '朱红', '青绿', '月白', '琥珀'];
+  const numbers = ['6', '8', '9', '16', '18', '28', '36', '66'];
+
+  const title = titles[Math.floor(Math.random() * titles.length)];
+  const luckyColor = colors[Math.floor(Math.random() * colors.length)];
+  const luckyNumber = numbers[Math.floor(Math.random() * numbers.length)];
+
+  return {
+    sign_title: `${themeName}${title}`.slice(0, 8),
+    sign_level: signLevel,
+    sign_text: `此签主${themeName}渐入佳境，宜先定小目标，循序推进；心定则气顺，气顺则机缘自来。`,
+    basic_interpretation: `你当前在${themeName}上处于蓄势阶段，稳住节奏比冒进更有利。先做可控之事，随后再扩大战果。`,
+    full_interpretation: `此时最忌心急与反复。建议将目标拆成三步：先厘清当下最关键的一件事，再给出一周可执行动作，最后按结果复盘微调方向。若遇分歧，优先选择风险更可控、长期更稳健的方案。保持作息与心态稳定，贵人和机会会在你持续行动后逐步显现。`,
+    lucky_number: luckyNumber,
+    lucky_color: luckyColor
+  };
+};
+
+const requestDrawJsonWithFallbackModel = async (messages) => {
+  let lastError = null;
+
+  for (const model of DRAW_MODEL_CANDIDATES) {
+    try {
+      const aiResp = await openai.chat.completions.create({
+        model,
+        messages,
+        temperature: 0.6,
+        max_tokens: 420,
+        stream: false
+      });
+
+      const rawText = (((aiResp || {}).choices || [])[0] || {}).message?.content || '';
+      const parsed = parseJsonFromText(rawText);
+      if (parsed) {
+        return parsed;
+      }
+      lastError = new Error(`Invalid AI draw response format from model: ${model}`);
+    } catch (err) {
+      lastError = err;
+      console.error(`Draw model failed (${model}):`, err?.message || err);
+    }
+  }
+
+  throw (lastError || new Error('All draw models failed'));
 };
 
 const todayDateStr = () => new Date().toISOString().split('T')[0];
@@ -244,6 +293,10 @@ app.post('/api/fortune/draw', async (req, res) => {
   const { userId, themeInfo, userProfile, signLevel } = req.body;
 
   try {
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Missing userId' });
+    }
+
     // 1. Check user status
     const { data: user, error: userError } = await supabase
       .from('users')
@@ -251,7 +304,9 @@ app.post('/api/fortune/draw', async (req, res) => {
       .eq('id', userId)
       .single();
 
-    if (userError || !user) throw new Error('User not found');
+    if (userError || !user) {
+      return res.status(404).json({ success: false, message: 'User not found', code: 'USER_NOT_FOUND' });
+    }
 
     // Check quota (VIP: unlimited or higher limit, Normal: 1)
     const limit = user.vip_level > 0 ? 999 : 1;
@@ -293,28 +348,26 @@ app.post('/api/fortune/draw', async (req, res) => {
       '7) 不得出现下签/下下签，不得输出免责声明。'
     ].join('\n');
 
-    const aiResp = await openai.chat.completions.create({
-      model: 'glm-4.5-air',
-      messages: [
-        {
-          role: 'system',
-          content: '你是精炼的中文古风签文生成助手。严格输出JSON，不输出多余文本。'
-        },
-        {
-          role: 'user',
-          content: drawPrompt
-        }
-      ],
-      temperature: 0.6,
-      max_tokens: 420,
-      enable_thinking: false,
-      stream: false
-    });
+    const messages = [
+      {
+        role: 'system',
+        content: '你是精炼的中文古风签文生成助手。严格输出JSON，不输出多余文本。'
+      },
+      {
+        role: 'user',
+        content: drawPrompt
+      }
+    ];
 
-    const rawText = (((aiResp || {}).choices || [])[0] || {}).message?.content || '';
-    const parsed = parseJsonFromText(rawText);
-    if (!parsed) {
-      throw new Error('Invalid AI draw response format');
+    let parsed = null;
+    try {
+      parsed = await requestDrawJsonWithFallbackModel(messages);
+    } catch (aiErr) {
+      console.error('Draw AI generation failed, fallback to local sign:', aiErr?.message || aiErr);
+      parsed = buildLocalFallbackSign({
+        themeName: safeThemeName,
+        signLevel: safeSignLevel
+      });
     }
 
     const signPayload = {
