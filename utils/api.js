@@ -91,9 +91,9 @@ export default {
 	login: (code) => request('/auth/login', 'POST', { code }),
 	
 	// 测算
-	drawFortune: (userId, theme, userProfile, signLevel) => request('/fortune/draw', 'POST', {
+	drawFortune: (userId, themeInfo, userProfile, signLevel) => request('/fortune/draw', 'POST', {
 		userId,
-		theme,
+		themeInfo,
 		userProfile,
 		signLevel
 	}),
@@ -127,6 +127,9 @@ export default {
 	
 	// 获取历史签文
 	getFortuneHistory: (userId) => request(`/fortune/history/${userId}`, 'GET'),
+
+	// 删除历史签文
+	deleteFortuneHistory: (userId, recordId) => request('/fortune/history/delete', 'POST', { userId, recordId }),
 	
 	// 获取福运榜
 	getRanking: () => request('/fortune/ranking', 'GET'),

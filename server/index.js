@@ -241,7 +241,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 2. Draw Fortune
 app.post('/api/fortune/draw', async (req, res) => {
-  const { userId, theme, userProfile, signLevel } = req.body;
+  const { userId, themeInfo, userProfile, signLevel } = req.body;
 
   try {
     // 1. Check user status
@@ -260,7 +260,9 @@ app.post('/api/fortune/draw', async (req, res) => {
     }
 
     // 2. Build compact prompt context for fast response
-    const safeTheme = String(theme || '综合').trim() || '综合';
+    const safeThemeType = String((themeInfo && themeInfo.themeType) || 'general').trim() || 'general';
+    const safeThemeName = String((themeInfo && themeInfo.themeName) || '综合').trim() || '综合';
+    const safeTheme = safeThemeName;
     const safeProfile = userProfile && typeof userProfile === 'object' ? userProfile : {};
     const safeSignLevel = SAFE_SIGN_LEVELS.includes(String(signLevel || '').trim())
       ? String(signLevel).trim()
@@ -274,12 +276,14 @@ app.post('/api/fortune/draw', async (req, res) => {
     const profileLine = profileParts.length ? profileParts.join('，') : '未填写';
 
     const drawPrompt = [
-      `主题:${safeTheme}`,
+      `主题类型:${safeThemeType}`,
+      `主题名称:${safeThemeName}`,
       `签等级(固定使用):${safeSignLevel}`,
       `用户信息:${profileLine}`,
       '请仅输出JSON对象，不要Markdown。',
       '字段: sign_title, sign_text, basic_interpretation, full_interpretation, lucky_number, lucky_color。',
       '要求:',
+      '0) 所有内容必须围绕“主题名称”展开，不可泛化到其他主题。',
       '1) sign_title 2-8字，不能出现“第X签”或序号。',
       '2) sign_text 30-60字，古风但易懂。',
       '3) basic_interpretation 35-80字。',
@@ -290,7 +294,7 @@ app.post('/api/fortune/draw', async (req, res) => {
     ].join('\n');
 
     const aiResp = await openai.chat.completions.create({
-      model: 'glm-4.6',
+      model: 'glm-4.5-air',
       messages: [
         {
           role: 'system',
@@ -905,6 +909,78 @@ app.get('/api/fortune/history/:userId', async (req, res) => {
   } catch (err) {
     console.error('Fetch history error:', err);
     res.status(500).json({ success: false, message: 'Failed to fetch history' });
+  }
+});
+
+// 6.1 Delete Fortune History Record
+app.post('/api/fortune/history/delete', async (req, res) => {
+  const { userId, recordId } = req.body || {};
+  const safeUserId = String(userId || '').trim();
+  const safeRecordId = String(recordId || '').trim();
+
+  if (!safeUserId || !safeRecordId) {
+    return res.status(400).json({ success: false, message: 'Missing userId or recordId' });
+  }
+
+  try {
+    const { data: record, error: recordQueryError } = await supabase
+      .from('fortune_records')
+      .select('id, user_id, sign_id, ai_interpretation_id')
+      .eq('id', safeRecordId)
+      .eq('user_id', safeUserId)
+      .single();
+
+    if (recordQueryError && recordQueryError.code === 'PGRST116') {
+      return res.status(404).json({ success: false, message: 'Record not found' });
+    }
+    if (recordQueryError || !record) throw (recordQueryError || new Error('Record not found'));
+
+    const signId = record.sign_id || null;
+    const aiInterpretationId = record.ai_interpretation_id || null;
+
+    const { error: deleteRecordError } = await supabase
+      .from('fortune_records')
+      .delete()
+      .eq('id', safeRecordId)
+      .eq('user_id', safeUserId);
+    if (deleteRecordError) throw deleteRecordError;
+
+    // If generated sign is no longer referenced, remove it.
+    if (signId) {
+      const { data: signRef, error: signRefError } = await supabase
+        .from('fortune_records')
+        .select('id')
+        .eq('sign_id', signId)
+        .limit(1);
+
+      if (!signRefError && (!signRef || signRef.length === 0)) {
+        await supabase
+          .from('fortune_signs')
+          .delete()
+          .eq('id', signId);
+      }
+    }
+
+    // If interpretation is no longer referenced, remove it.
+    if (aiInterpretationId) {
+      const { data: aiRef, error: aiRefError } = await supabase
+        .from('fortune_records')
+        .select('id')
+        .eq('ai_interpretation_id', aiInterpretationId)
+        .limit(1);
+
+      if (!aiRefError && (!aiRef || aiRef.length === 0)) {
+        await supabase
+          .from('ai_interpretations')
+          .delete()
+          .eq('id', aiInterpretationId);
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Delete history record error:', err);
+    return res.status(500).json({ success: false, message: 'Delete history record failed' });
   }
 });
 

@@ -1,30 +1,42 @@
 <template>
 	<view class="container">
+		<text class="swipe-tip" v-if="records.length > 0">温馨提示：左滑历史记录可显示删除按钮。</text>
 		<view class="history-list" v-if="records.length > 0">
-			<view class="history-item" 
-				v-for="(item, index) in records" 
-				:key="index" 
-				@click="showDetail(item)"
-				:class="{ 'has-interpretation': item.ai_interpretations }"
-			>
-				<view class="item-header">
-					<text class="item-date">{{ formatDate(item.created_at) }}</text>
-					<view class="header-right">
-						<view class="interpret-tag" v-if="item.ai_interpretations">
-							<uni-icons type="vip-filled" size="12" color="#fff"></uni-icons>
-							<text>大师亲批</text>
+			<uni-swipe-action>
+				<uni-swipe-action-item
+					v-for="(item, index) in records"
+					:key="item.id || index"
+					:right-options="swipeOptions"
+					@click="onSwipeActionClick($event, item, index)"
+				>
+					<view
+						class="history-item"
+						@click="handleItemTap(item)"
+						@touchstart="onItemTouchStart"
+						@touchmove="onItemTouchMove"
+						@touchend="onItemTouchEnd"
+						:class="{ 'has-interpretation': item.ai_interpretations }"
+					>
+						<view class="item-header">
+							<text class="item-date">{{ formatDate(item.created_at) }}</text>
+							<view class="header-right">
+								<view class="interpret-tag" v-if="item.ai_interpretations">
+									<uni-icons type="vip-filled" size="12" color="#fff"></uni-icons>
+									<text>大师亲批</text>
+								</view>
+								<text class="item-theme">{{ item.theme }}</text>
+							</view>
 						</view>
-						<text class="item-theme">{{ item.theme }}</text>
+						<view class="item-content">
+							<view class="sign-info">
+								<text class="sign-level">{{ getFortuneSign(item).sign_level || getFortuneSign(item).signLevel }}</text>
+								<text class="sign-title">{{ getFortuneSign(item).sign_title || getFortuneSign(item).signTitle }}</text>
+							</view>
+							<text class="sign-text">{{ getFortuneSign(item).sign_text || getFortuneSign(item).signText }}</text>
+						</view>
 					</view>
-				</view>
-				<view class="item-content">
-					<view class="sign-info">
-						<text class="sign-level">{{ getFortuneSign(item).sign_level || getFortuneSign(item).signLevel }}</text>
-						<text class="sign-title">{{ getFortuneSign(item).sign_title || getFortuneSign(item).signTitle }}</text>
-					</view>
-					<text class="sign-text">{{ getFortuneSign(item).sign_text || getFortuneSign(item).signText }}</text>
-				</view>
-			</view>
+				</uni-swipe-action-item>
+			</uni-swipe-action>
 		</view>
 		<view class="empty-state" v-else>
 			<uni-icons type="calendar" size="60" color="#D2B48C"></uni-icons>
@@ -48,7 +60,18 @@
 			return {
 				records: [],
 				currentSign: {},
-				isVip: false
+				isVip: false,
+				deletingRecordId: '',
+				isSwipingItem: false,
+				swipeOptions: [
+					{
+						text: '删除',
+						style: {
+							backgroundColor: '#DC143C',
+							color: '#fff'
+						}
+					}
+				]
 			}
 		},
 		onShow() {
@@ -60,6 +83,21 @@
 			this.loadHistory();
 		},
 		methods: {
+			onItemTouchStart() {
+				this.isSwipingItem = false;
+			},
+			onItemTouchMove() {
+				this.isSwipingItem = true;
+			},
+			onItemTouchEnd() {
+				setTimeout(() => {
+					this.isSwipingItem = false;
+				}, 80);
+			},
+			handleItemTap(item) {
+				if (this.isSwipingItem) return;
+				this.showDetail(item);
+			},
 			getFortuneSign(item = {}) {
 				const raw = item.fortune_signs;
 				if (Array.isArray(raw)) return raw[0] || {};
@@ -103,6 +141,42 @@
 					this.$refs.signResult && this.$refs.signResult.open();
 				});
 			},
+			onSwipeActionClick(e, item, index) {
+				const actionIndex = e && e.index !== undefined ? Number(e.index) : 0;
+				if (actionIndex !== 0) return;
+				this.confirmDeleteRecord(item, index);
+			},
+			confirmDeleteRecord(item, index) {
+				if (!item || !item.id) return;
+				if (this.deletingRecordId) return;
+
+				uni.showModal({
+					title: '删除记录',
+					content: '确认删除这条历史签文吗？删除后不可恢复。',
+					confirmText: '删除',
+					cancelText: '取消',
+					success: (res) => {
+						if (!res.confirm) return;
+						this.deleteRecord(item.id, index);
+					}
+				});
+			},
+			deleteRecord(recordId, index) {
+				const userInfo = uni.getStorageSync('userInfo');
+				if (!userInfo || !userInfo.id) {
+					uni.showToast({ title: '请先登录', icon: 'none' });
+					return;
+				}
+				this.deletingRecordId = recordId;
+				api.deleteFortuneHistory(userInfo.id, recordId).then(() => {
+					this.records.splice(index, 1);
+					uni.showToast({ title: '已删除', icon: 'success' });
+				}).catch(() => {
+					uni.showToast({ title: '删除失败，请重试', icon: 'none' });
+				}).finally(() => {
+					this.deletingRecordId = '';
+				});
+			},
 			formatDate(dateStr) {
 				const date = new Date(dateStr);
 				return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
@@ -116,13 +190,54 @@
 		min-height: 100vh;
 		background-color: #FAF0E6;
 		padding: 20px;
+		box-sizing: border-box;
+	}
+
+	.history-list {
+		width: 100%;
+	}
+
+	.swipe-tip {
+		display: block;
+		font-size: 12px;
+		line-height: 1.6;
+		color: #9c8a7a;
+		margin: 2px 2px 10px;
+	}
+
+	::v-deep .uni-swipe {
+		width: 100%;
+		margin-bottom: 12px;
+	}
+
+	::v-deep .uni-swipe_box {
+		width: 100%;
+	}
+
+	::v-deep .button-group--right {
+		right: -2px;
+	}
+
+	::v-deep .uni-swipe_text--wrapper {
+		display: flex;
+		align-items: stretch;
+	}
+
+	::v-deep .uni-swipe_button {
+		height: auto;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 72px;
 	}
 
 	.history-item {
+		width: 100%;
+		box-sizing: border-box;
 		background-color: #fff;
 		border-radius: 12px;
 		padding: 15px;
-		margin-bottom: 15px;
+		margin-bottom: 0;
 		box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 		border-left: 4px solid #D2B48C; // 默认普通签文颜色
 		position: relative;

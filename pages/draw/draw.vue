@@ -15,11 +15,13 @@
 				</view>
 			</view>
 			<text class="shake-hint" v-if="!isShaking">点击屏幕或摇动手机</text>
-			<text class="shake-hint" v-else>正在测算中...</text>
+			<text class="shake-hint" v-else>{{ rollingHint }}</text>
 		</view>
 
 		<!-- 签文弹窗 -->
 		<sign-result ref="signResult" :sign="result" :isVip="isVip"></sign-result>
+
+		<text class="ai-disclaimer">温馨提示：AI解读仅供传统文化参考，请结合实际情况审慎鉴别。</text>
 	</view>
 </template>
 
@@ -38,7 +40,28 @@
 				themeName: '财运',
 				isShaking: false,
 				isVip: false,
-				result: {}
+				result: {},
+				rollingIndex: 0,
+				rollingTimer: null,
+				rollingHints: [
+					'正在查询《周易》',
+					'正在查询《道德经》',
+					'正在推演六爻卦象',
+					'正在起卦定爻位',
+					'正在参看《滴天髓》',
+					'正在纳甲取象',
+					'正在合参梅花易数',
+					'正在卜筮断意',
+					'正在观星定时运',
+					'正在调和五行气机',
+					'正在参看《三命通会》',
+					'正在推断流年气数'
+				]
+			}
+		},
+		computed: {
+			rollingHint() {
+				return this.rollingHints[this.rollingIndex] || '正在推演卦象';
 			}
 		},
 		onLoad(options) {
@@ -48,7 +71,23 @@
 			const vipStatus = uni.getStorageSync('isVip');
 			if (vipStatus) this.isVip = true;
 		},
+		onUnload() {
+			this.stopHintRolling();
+		},
 		methods: {
+			startHintRolling() {
+				this.stopHintRolling();
+				this.rollingIndex = 0;
+				this.rollingTimer = setInterval(() => {
+					this.rollingIndex = (this.rollingIndex + 1) % this.rollingHints.length;
+				}, 850);
+			},
+			stopHintRolling() {
+				if (this.rollingTimer) {
+					clearInterval(this.rollingTimer);
+					this.rollingTimer = null;
+				}
+			},
 			getLocalSignLevel() {
 				const levels = ['上上签', '上吉签', '中吉签', '中平签'];
 				return levels[Math.floor(Math.random() * levels.length)];
@@ -72,15 +111,20 @@
 			handleDrawSuccess(res) {
 				setTimeout(() => {
 					this.isShaking = false;
+					this.stopHintRolling();
 					this.result = { ...res.sign, recordId: res.recordId };
 					this.$refs.signResult.open();
 				}, 500);
 			},
 			requestDraw(userId, userProfile, signLevel) {
-				api.drawFortune(userId, this.themeName, userProfile, signLevel).then((res) => {
+				api.drawFortune(userId, {
+					themeType: this.themeType,
+					themeName: this.themeName
+				}, userProfile, signLevel).then((res) => {
 					this.handleDrawSuccess(res);
 				}).catch((err) => {
 					this.isShaking = false;
+					this.stopHintRolling();
 					const errCode = err && err.code ? String(err.code) : '';
 					const errMsg = err && err.message ? String(err.message).toLowerCase() : '';
 					const isLimitReached = errCode === 'LIMIT_REACHED' || errMsg.includes('daily limit reached') || errMsg.includes('limit reached');
@@ -130,9 +174,13 @@
 					uni.showToast({ title: '机缘已续，可再求一签', icon: 'success' });
 
 					this.isShaking = true;
-					this.requestDraw(userId);
+					this.startHintRolling();
+					const userProfile = this.getUserProfile();
+					const signLevel = this.getLocalSignLevel();
+					this.requestDraw(userId, userProfile, signLevel);
 				} catch (err) {
 					uni.hideLoading();
+					this.stopHintRolling();
 					console.error('watchAdForExtraDraw failed:', err);
 					uni.showToast({ title: '续签失败，请稍后重试', icon: 'none' });
 				}
@@ -165,6 +213,7 @@
 				}
 
 				this.isShaking = true;
+				this.startHintRolling();
 				this.safeVibrateLong();
 				const userProfile = this.getUserProfile();
 				const signLevel = this.getLocalSignLevel();
@@ -174,10 +223,11 @@
 						title: '温馨提示',
 						content: '完善个人信息后再测算会更精准，是否前往填写？',
 						confirmText: '去填写',
-						cancelText: '继续',
+						cancelText: '暂不',
 						success: (modalRes) => {
 							if (modalRes.confirm) {
 								this.isShaking = false;
+								this.stopHintRolling();
 								uni.navigateTo({ url: '/pages/mine/profile' });
 								return;
 							}
@@ -291,5 +341,16 @@
 	.shake-hint {
 		font-size: 18px;
 		color: #666;
+	}
+
+	.ai-disclaimer {
+		position: fixed;
+		left: 20px;
+		right: 20px;
+		bottom: 24px;
+		font-size: 11px;
+		line-height: 1.6;
+		color: #8c7d6f;
+		text-align: center;
 	}
 </style>
