@@ -8,21 +8,12 @@
 				</view>
 				<view class="message-content">
 					<view class="bubble">
-						<text selectable>{{ msg.content }}</text>
-					</view>
-				</view>
-			</view>
-			
-			<!-- Loading 状态 -->
-			<view class="chat-item ai" v-if="loading">
-				<view class="avatar-container">
-					<image class="avatar" src="/static/master_avatar.png" mode="aspectFill"></image>
-				</view>
-				<view class="message-content">
-					<view class="bubble loading">
-						<view class="dot"></view>
-						<view class="dot"></view>
-						<view class="dot"></view>
+						<template v-if="msg.role === 'ai' && loading && !msg.content && index === messages.length - 1">
+							<view class="dot"></view>
+							<view class="dot"></view>
+							<view class="dot"></view>
+						</template>
+						<text v-else selectable>{{ msg.content }}</text>
 					</view>
 				</view>
 			</view>
@@ -429,7 +420,7 @@
 	}
 
 	.padding-bottom {
-		height: 80px;
+		height: 140px;
 	}
 
 	.input-area {

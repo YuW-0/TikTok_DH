@@ -41,6 +41,9 @@ const CHAT_PURCHASE_PACKAGES = [10, 50, 100];
 
 const SAFE_SIGN_LEVELS = ['上上签', '上吉签', '中吉签', '中平签'];
 const DRAW_MODEL = 'glm-4.6';
+const DRAW_TEMPERATURE = 0.68;
+const DRAW_MAX_TOKENS = 320;
+const DRAW_TIMEOUT_MS = 18000;
 
 const getMessageText = (content) => {
   if (!content) return '';
@@ -91,9 +94,10 @@ const requestDrawJson = async (messages) => {
     aiResp = await openai.chat.completions.create({
       model: DRAW_MODEL,
       messages,
-      temperature: 0.82,
-      max_tokens: 520,
-      stream: false
+      temperature: DRAW_TEMPERATURE,
+      max_tokens: DRAW_MAX_TOKENS,
+      stream: false,
+      timeout: DRAW_TIMEOUT_MS
     });
   } catch (err) {
     const message = String(err?.message || 'unknown AI error');
@@ -371,9 +375,9 @@ app.post('/api/fortune/draw', async (req, res) => {
       '要求:',
       '0) 所有内容必须围绕“主题名称”展开，不可泛化到其他主题。',
       '1) sign_title 2-8字，不能出现“第X签”或序号。',
-      '2) sign_text 24-40字，古风但易懂。',
-      '3) basic_interpretation 28-55字。',
-      '4) full_interpretation 80-130字，给可执行建议，避免空话。',
+      '2) sign_text 20-32字，古风但易懂。',
+      '3) basic_interpretation 24-42字。',
+      '4) full_interpretation 60-100字，给可执行建议，避免空话。',
       '5) lucky_number 为1-99数字字符串。',
       '6) lucky_color 为常见中文颜色词。',
       '7) 不得出现下签/下下签，不得输出免责声明。'
@@ -390,21 +394,8 @@ app.post('/api/fortune/draw', async (req, res) => {
       }
     ];
 
-    let parsed = await requestDrawJson(messages);
-    let core = parseAiDrawCoreFields(parsed);
-
-    // Keep output strictly AI-generated: if key fields are incomplete, ask AI once more with stricter instruction.
-    if (!core.isValid) {
-      const retryMessages = [
-        ...messages,
-        {
-          role: 'user',
-          content: '你上一条JSON缺少关键字段。请重新仅输出完整JSON，确保 sign_title、lucky_number(1-99数字字符串)、lucky_color 必填。'
-        }
-      ];
-      parsed = await requestDrawJson(retryMessages);
-      core = parseAiDrawCoreFields(parsed);
-    }
+    const parsed = await requestDrawJson(messages);
+    const core = parseAiDrawCoreFields(parsed);
 
     if (!core.isValid) {
       return res.status(502).json({ success: false, message: 'Draw AI response incomplete, please retry' });
@@ -1419,7 +1410,7 @@ app.post('/api/chat/ask-stream', async (req, res) => {
   const { userId, message, history } = req.body;
 
   const writeChunk = (payload) => {
-    res.write(`${JSON.stringify(payload)}\n`);
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
 
   try {
@@ -1502,9 +1493,13 @@ app.post('/api/chat/ask-stream', async (req, res) => {
     }
     messages.push({ role: 'user', content: message });
 
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
 
     const stream = await openai.chat.completions.create({
       model: 'glm-4.5',
@@ -1553,6 +1548,7 @@ app.post('/api/chat/ask-stream', async (req, res) => {
     }
 
     writeChunk({ type: 'done' });
+    res.write('data: [DONE]\n\n');
     return res.end();
   } catch (err) {
     console.error('Chat stream error:', err);

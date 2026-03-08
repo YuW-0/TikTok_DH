@@ -175,8 +175,16 @@ export default {
 				const line = state.buffer.slice(0, lineEnd).trim();
 				state.buffer = state.buffer.slice(lineEnd + 1);
 				if (line) {
+					if (line === 'data: [DONE]') {
+						state.done = true;
+						onDone(state.fullText);
+						lineEnd = state.buffer.indexOf('\n');
+						continue;
+					}
+
+					const payloadLine = line.startsWith('data:') ? line.slice(5).trim() : line;
 					try {
-						const event = JSON.parse(line);
+						const event = JSON.parse(payloadLine);
 						if (event.type === 'delta' && typeof event.content === 'string') {
 							state.fullText += event.content;
 							onDelta(event.content, state.fullText);
@@ -268,6 +276,9 @@ export default {
 				});
 			} else {
 				// Runtime does not support chunk callback, fallback to non-stream API.
+				if (requestTask && typeof requestTask.abort === 'function') {
+					requestTask.abort();
+				}
 				request('/chat/ask', 'POST', { userId, message, history }, { timeout: 300000 })
 					.then((res) => {
 						if (state.settled) return;
