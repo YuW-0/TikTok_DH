@@ -12,6 +12,28 @@ const shouldRetryNetwork = (err = {}) => {
 	return isAbortLikeError(err) || errMsg.includes('timeout') || errMsg.includes('network');
 };
 
+const normalizeErrorPayload = (payload, fallback = {}) => {
+	if (!payload) return { ...fallback };
+	if (typeof payload === 'string') {
+		try {
+			const parsed = JSON.parse(payload);
+			if (parsed && typeof parsed === 'object') {
+				return { ...fallback, ...parsed };
+			}
+		} catch (err) {
+			return {
+				...fallback,
+				message: payload
+			};
+		}
+		return { ...fallback };
+	}
+	if (typeof payload === 'object') {
+		return { ...fallback, ...payload };
+	}
+	return { ...fallback };
+};
+
 const decodeChunkBuffer = (() => {
 	const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null;
 	return (arrayBuffer) => {
@@ -193,7 +215,10 @@ export default {
 				success: (res) => {
 					if (state.settled) return;
 					if (res.statusCode !== 200) {
-						const payload = res.data || { message: `请求失败(${res.statusCode})` };
+						const payload = normalizeErrorPayload(res.data, {
+							statusCode: res.statusCode,
+							message: `请求失败(${res.statusCode})`
+						});
 						onError(payload);
 						settleReject(payload);
 						return;
@@ -220,6 +245,15 @@ export default {
 				},
 				fail: (err) => {
 					if (state.settled) return;
+					if (shouldRetryNetwork(err)) {
+						request('/fortune/draw', 'POST', { userId, themeInfo, userProfile, signLevel })
+							.then((normalRes) => settleResolve(normalRes))
+							.catch((fallbackErr) => {
+								onError(fallbackErr);
+								settleReject(fallbackErr);
+							});
+						return;
+					}
 					onError(err);
 					settleReject(err);
 				}
@@ -373,7 +407,10 @@ export default {
 				success: (res) => {
 					if (state.settled) return;
 					if (res.statusCode !== 200) {
-						const payload = res.data || { message: `请求失败(${res.statusCode})` };
+						const payload = normalizeErrorPayload(res.data, {
+							statusCode: res.statusCode,
+							message: `请求失败(${res.statusCode})`
+						});
 						onError(payload);
 						settleReject(payload);
 						return;
@@ -395,6 +432,11 @@ export default {
 				},
 				fail: (err) => {
 					if (state.settled) return;
+					if (state.fullText) {
+						onDone(state.fullText);
+						settleResolve();
+						return;
+					}
 					onError(err);
 					settleReject(err);
 				}
@@ -408,6 +450,10 @@ export default {
 					parseAndDispatchLines(text, state);
 					if (state.error) {
 						settleReject(state.error);
+						return;
+					}
+					if (state.done) {
+						settleResolve();
 					}
 				});
 			} else {

@@ -211,6 +211,20 @@
 				// 3. 调用 API
 				const userId = this.userInfo ? this.userInfo.id : 'guest';
 				let hasDelta = false;
+				const fallbackToNormalChat = () => {
+					return api.chatAsk(userId, message, history).then((res) => {
+						const text = String(res.response || '').trim() || '贫道正在思量此事。';
+						if (this.messages[aiIndex]) {
+							this.messages[aiIndex].content = text;
+						} else {
+							this.messages.push({ role: 'ai', content: text });
+						}
+						this.pendingMessage = '';
+						this.loading = false;
+						this.refreshChatAssets();
+						this.scrollToBottom();
+					});
+				};
 				api.chatAskStream(userId, message, history, {
 					onDelta: (delta, fullText) => {
 						if (typeof fullText !== 'string') return;
@@ -233,6 +247,22 @@
 					this.scrollToBottom();
 				}).catch(err => {
 					this.loading = false;
+					const aiMsgAtIndex = this.messages[aiIndex];
+					const hasRenderedAiText = Boolean(aiMsgAtIndex && aiMsgAtIndex.role === 'ai' && String(aiMsgAtIndex.content || '').trim());
+					if (!hasDelta) {
+						const streamFailed = String(err && err.code ? err.code : '').includes('STREAM') || String(err && err.message ? err.message : '').toLowerCase().includes('stream');
+						if (streamFailed) {
+							fallbackToNormalChat().catch(() => {
+								const aiMsg = this.messages[this.messages.length - 1];
+								if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {
+									this.messages.pop();
+								}
+								this.messages.push({ role: 'ai', content: '大师正在打坐，请稍后再试。' });
+								this.scrollToBottom();
+							});
+							return;
+						}
+					}
 					// 次数不足：使用福缘珠购买问道次数
 					if (err.code === 'CHAT_TOKEN_REQUIRED') {
 						this.pendingMessage = message;
@@ -247,6 +277,12 @@
 						this.inputMessage = message;
 						this.openPurchasePanel();
 					} else {
+						if (hasDelta || hasRenderedAiText) {
+							this.pendingMessage = '';
+							this.refreshChatAssets();
+							this.scrollToBottom();
+							return;
+						}
 						if (!hasDelta) {
 							const aiMsg = this.messages[this.messages.length - 1];
 							if (aiMsg && aiMsg.role === 'ai' && !aiMsg.content) {

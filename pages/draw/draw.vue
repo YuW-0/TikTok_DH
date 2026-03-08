@@ -156,7 +156,8 @@
 					this.stopHintRolling();
 					const errCode = err && err.code ? String(err.code) : '';
 					const errMsg = err && err.message ? String(err.message).toLowerCase() : '';
-					const isLimitReached = errCode === 'LIMIT_REACHED' || errMsg.includes('daily limit reached') || errMsg.includes('limit reached');
+					const statusCode = Number(err && err.statusCode);
+					const isLimitReached = errCode === 'LIMIT_REACHED' || statusCode === 403 || errMsg.includes('daily limit reached') || errMsg.includes('limit reached');
 
 					if (isLimitReached) {
 						uni.showModal({
