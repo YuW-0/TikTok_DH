@@ -65,7 +65,7 @@ const requestDrawJson = async (messages) => {
     model: DRAW_MODEL,
     messages,
     temperature: 0.82,
-    max_tokens: 320,
+    max_tokens: 520,
     stream: false
   });
 
@@ -76,6 +76,29 @@ const requestDrawJson = async (messages) => {
   }
 
   return parsed;
+};
+
+const parseAiDrawCoreFields = (parsed = {}) => {
+  const aiSignTitle = String(parsed.sign_title || '').trim();
+  const aiLuckyColor = String(parsed.lucky_color || '').trim();
+  const aiLuckyNumberRaw = String(parsed.lucky_number || '').trim();
+  const aiLuckyNumber = aiLuckyNumberRaw.replace(/[^0-9]/g, '');
+  const luckyNumberValue = Number(aiLuckyNumber);
+
+  const isValid = Boolean(
+    aiSignTitle &&
+    aiLuckyColor &&
+    aiLuckyNumber &&
+    luckyNumberValue >= 1 &&
+    luckyNumberValue <= 99
+  );
+
+  return {
+    isValid,
+    aiSignTitle,
+    aiLuckyColor,
+    aiLuckyNumber
+  };
 };
 
 const todayDateStr = () => new Date().toISOString().split('T')[0];
@@ -331,27 +354,35 @@ app.post('/api/fortune/draw', async (req, res) => {
       }
     ];
 
-    const parsed = await requestDrawJson(messages);
+    let parsed = await requestDrawJson(messages);
+    let core = parseAiDrawCoreFields(parsed);
 
-    const aiSignTitle = String(parsed.sign_title || '').trim();
-    const aiLuckyColor = String(parsed.lucky_color || '').trim();
-    const aiLuckyNumberRaw = String(parsed.lucky_number || '').trim();
-    const aiLuckyNumber = aiLuckyNumberRaw.replace(/[^0-9]/g, '');
-    const luckyNumberValue = Number(aiLuckyNumber);
+    // Keep output strictly AI-generated: if key fields are incomplete, ask AI once more with stricter instruction.
+    if (!core.isValid) {
+      const retryMessages = [
+        ...messages,
+        {
+          role: 'user',
+          content: '你上一条JSON缺少关键字段。请重新仅输出完整JSON，确保 sign_title、lucky_number(1-99数字字符串)、lucky_color 必填。'
+        }
+      ];
+      parsed = await requestDrawJson(retryMessages);
+      core = parseAiDrawCoreFields(parsed);
+    }
 
-    if (!aiSignTitle || !aiLuckyColor || !aiLuckyNumber || luckyNumberValue < 1 || luckyNumberValue > 99) {
-      throw new Error('Incomplete AI draw response for title/color/number');
+    if (!core.isValid) {
+      return res.status(502).json({ success: false, message: 'Draw AI response incomplete, please retry' });
     }
 
     const signPayload = {
-      sign_title: aiSignTitle,
+      sign_title: core.aiSignTitle,
       sign_level: safeSignLevel,
       sign_text: String(parsed.sign_text || '').trim() || '云开月现，心定则路明。',
       basic_interpretation: String(parsed.basic_interpretation || '').trim() || '守正心、稳步行，机缘会在行动中显现。',
       full_interpretation: String(parsed.full_interpretation || '').trim() || '当下宜先立小目标，再逐步推进。与其反复犹豫，不如把握可控事项，边做边校正。',
       theme: safeTheme,
-      lucky_number: aiLuckyNumber,
-      lucky_color: aiLuckyColor
+      lucky_number: core.aiLuckyNumber,
+      lucky_color: core.aiLuckyColor
     };
 
     // 3. Persist generated sign as a record-backed sign row for history/ranking compatibility
