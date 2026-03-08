@@ -40,6 +40,8 @@
 			<uni-icons :type="audioEnabled ? 'sound-filled' : 'sound'" size="24" color="#8B4513"></uni-icons>
 			<text>{{ audioEnabled ? '静心音效' : '静音模式' }}</text>
 		</view>
+
+		<text class="game-disclaimer">温馨提示：此为游戏，仅供娱乐。</text>
 	</view>
 </template>
 
@@ -356,7 +358,7 @@
 
 	.audio-control {
 		position: absolute;
-		bottom: 50px;
+		bottom: 74px;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -367,5 +369,16 @@
 		uni-icons {
 			margin-bottom: 5px;
 		}
+	}
+
+	.game-disclaimer {
+		position: absolute;
+		left: 20px;
+		right: 20px;
+		bottom: 24px;
+		font-size: 11px;
+		line-height: 1.5;
+		color: #8f7e6c;
+		text-align: center;
 	}
 </style>

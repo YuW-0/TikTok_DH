@@ -27,6 +27,7 @@
 
 		<button class="action-btn" @click="nextRound" :disabled="openedIndex === null || chances <= 0">下一轮</button>
 		<text class="tip">每天可翻 3 次，每次翻中即刻计入福分。</text>
+		<text class="game-disclaimer">温馨提示：此为游戏，仅供娱乐。</text>
 	</view>
 </template>
 
@@ -95,6 +96,8 @@
 		min-height: 100vh;
 		background: #faf0e6;
 		padding: 16px;
+		padding-bottom: 72px;
+		position: relative;
 	}
 	.header {
 		background: #fff;
@@ -229,5 +232,16 @@
 		color: #888;
 		text-align: center;
 		margin-top: 10px;
+	}
+
+	.game-disclaimer {
+		position: fixed;
+		left: 20px;
+		right: 20px;
+		bottom: 20px;
+		font-size: 11px;
+		line-height: 1.5;
+		color: #8f7e6c;
+		text-align: center;
 	}
 </style>

@@ -36,6 +36,7 @@
 		</button>
 		<text class="result-hint" v-if="lastGain">本次命中：+{{ lastGain }} 福分</text>
 		<text class="tip">每日可转 5 次，福分自动累计。</text>
+		<text class="game-disclaimer">温馨提示：此为游戏，仅供娱乐。</text>
 	</view>
 </template>
 
@@ -133,6 +134,7 @@
 		min-height: 100vh;
 		background: linear-gradient(180deg, #fbf1e2 0%, #f6e1be 100%);
 		padding: 16px;
+		padding-bottom: 72px;
 		position: relative;
 		overflow: hidden;
 	}
@@ -312,6 +314,18 @@
 		font-weight: bold;
 		text-align: center;
 		margin-top: 10px;
+	}
+
+	.game-disclaimer {
+		position: fixed;
+		left: 20px;
+		right: 20px;
+		bottom: 20px;
+		font-size: 11px;
+		line-height: 1.5;
+		color: #8f7e6c;
+		text-align: center;
+		z-index: 6;
 	}
 
 	@keyframes auraPulse {
