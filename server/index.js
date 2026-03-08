@@ -60,32 +60,12 @@ const parseJsonFromText = (rawText = '') => {
   }
 };
 
-const buildLocalFallbackSign = ({ themeName, signLevel }) => {
-  const titles = ['云开见月', '顺势而行', '清心得路', '静候佳音', '守正迎吉'];
-  const colors = ['金色', '朱红', '青绿', '月白', '琥珀'];
-  const numbers = ['6', '8', '9', '16', '18', '28', '36', '66'];
-
-  const title = titles[Math.floor(Math.random() * titles.length)];
-  const luckyColor = colors[Math.floor(Math.random() * colors.length)];
-  const luckyNumber = numbers[Math.floor(Math.random() * numbers.length)];
-
-  return {
-    sign_title: `${themeName}${title}`.slice(0, 8),
-    sign_level: signLevel,
-    sign_text: `此签主${themeName}渐入佳境，宜先定小目标，循序推进；心定则气顺，气顺则机缘自来。`,
-    basic_interpretation: `你当前在${themeName}上处于蓄势阶段，稳住节奏比冒进更有利。先做可控之事，随后再扩大战果。`,
-    full_interpretation: `此时最忌心急与反复。建议将目标拆成三步：先厘清当下最关键的一件事，再给出一周可执行动作，最后按结果复盘微调方向。若遇分歧，优先选择风险更可控、长期更稳健的方案。保持作息与心态稳定，贵人和机会会在你持续行动后逐步显现。`,
-    lucky_number: luckyNumber,
-    lucky_color: luckyColor
-  };
-};
-
 const requestDrawJson = async (messages) => {
   const aiResp = await openai.chat.completions.create({
     model: DRAW_MODEL,
     messages,
-    temperature: 0.6,
-    max_tokens: 260,
+    temperature: 0.82,
+    max_tokens: 320,
     stream: false
   });
 
@@ -319,12 +299,14 @@ app.post('/api/fortune/draw', async (req, res) => {
     if (safeProfile.birthDate) profileParts.push(`生日:${String(safeProfile.birthDate).trim()}`);
     if (safeProfile.birthHour) profileParts.push(`时辰:${String(safeProfile.birthHour).trim()}`);
     const profileLine = profileParts.length ? profileParts.join('，') : '未填写';
+    const drawNonce = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
     const drawPrompt = [
       `主题类型:${safeThemeType}`,
       `主题名称:${safeThemeName}`,
       `签等级(固定使用):${safeSignLevel}`,
       `用户信息:${profileLine}`,
+      `请求标识:${drawNonce}`,
       '请仅输出JSON对象，不要Markdown。',
       '字段: sign_title, sign_text, basic_interpretation, full_interpretation, lucky_number, lucky_color。',
       '要求:',
@@ -349,26 +331,27 @@ app.post('/api/fortune/draw', async (req, res) => {
       }
     ];
 
-    let parsed = null;
-    try {
-      parsed = await requestDrawJson(messages);
-    } catch (aiErr) {
-      console.error('Draw AI generation failed, fallback to local sign:', aiErr?.message || aiErr);
-      parsed = buildLocalFallbackSign({
-        themeName: safeThemeName,
-        signLevel: safeSignLevel
-      });
+    const parsed = await requestDrawJson(messages);
+
+    const aiSignTitle = String(parsed.sign_title || '').trim();
+    const aiLuckyColor = String(parsed.lucky_color || '').trim();
+    const aiLuckyNumberRaw = String(parsed.lucky_number || '').trim();
+    const aiLuckyNumber = aiLuckyNumberRaw.replace(/[^0-9]/g, '');
+    const luckyNumberValue = Number(aiLuckyNumber);
+
+    if (!aiSignTitle || !aiLuckyColor || !aiLuckyNumber || luckyNumberValue < 1 || luckyNumberValue > 99) {
+      throw new Error('Incomplete AI draw response for title/color/number');
     }
 
     const signPayload = {
-      sign_title: String(parsed.sign_title || '').trim() || '云开见月',
+      sign_title: aiSignTitle,
       sign_level: safeSignLevel,
       sign_text: String(parsed.sign_text || '').trim() || '云开月现，心定则路明。',
       basic_interpretation: String(parsed.basic_interpretation || '').trim() || '守正心、稳步行，机缘会在行动中显现。',
       full_interpretation: String(parsed.full_interpretation || '').trim() || '当下宜先立小目标，再逐步推进。与其反复犹豫，不如把握可控事项，边做边校正。',
       theme: safeTheme,
-      lucky_number: String(parsed.lucky_number || '').trim() || String(Math.floor(Math.random() * 9) + 1),
-      lucky_color: String(parsed.lucky_color || '').trim() || '金色'
+      lucky_number: aiLuckyNumber,
+      lucky_color: aiLuckyColor
     };
 
     // 3. Persist generated sign as a record-backed sign row for history/ranking compatibility
