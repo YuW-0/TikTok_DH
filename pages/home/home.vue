@@ -32,14 +32,9 @@
 		<view class="draw-section">
 			<view class="draw-container" @click="goToDraw">
 				<view class="draw-cylinder">
-					<view class="cylinder-body">
-						<text class="cylinder-text">测算</text>
-					</view>
-					<view class="sticks">
-						<view class="stick" v-for="n in 5" :key="n"></view>
-					</view>
+					<image class="tube-image" src="/static/divination_tube.png" mode="aspectFit"></image>
 				</view>
-				<text class="draw-hint">点击摇签筒开始测算</text>
+				<text class="draw-hint">点击摇签筒开始大模型测算</text>
 			</view>
 		</view>
 
@@ -394,54 +389,12 @@
 		height: 180px;
 		position: relative;
 		margin-bottom: 20px;
-		
-		.cylinder-body {
-			width: 100%;
-			height: 100%;
-			background: linear-gradient(135deg, #8B4513, #A0522D);
-			border-radius: 10px 10px 40px 40px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-			border: 4px solid #FFD700;
-			position: relative;
-			z-index: 2;
-			
-			.cylinder-text {
-				font-size: 36px;
-				color: #FFD700;
-				font-weight: bold;
-				writing-mode: vertical-rl;
-				letter-spacing: 10px;
-				font-family: "SimSun", serif; // 宋体或其他衬线体
-			}
-		}
+	}
 
-		.sticks {
-			position: absolute;
-			top: -20px;
-			left: 20px;
-			right: 20px;
-			height: 40px;
-			z-index: 1;
-			display: flex;
-			justify-content: space-around;
-			
-			.stick {
-				width: 6px;
-				height: 50px;
-				background-color: #DEB887;
-				border-radius: 3px;
-				transform-origin: bottom center;
-				
-				&:nth-child(1) { transform: rotate(-15deg); }
-				&:nth-child(2) { transform: rotate(-5deg); height: 55px; }
-				&:nth-child(3) { transform: rotate(5deg); }
-				&:nth-child(4) { transform: rotate(15deg); height: 45px; }
-				&:nth-child(5) { transform: rotate(0deg); height: 52px; }
-			}
-		}
+	.tube-image {
+		width: 100%;
+		height: 100%;
+		display: block;
 	}
 
 	.draw-hint {

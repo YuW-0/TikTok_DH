@@ -140,7 +140,7 @@ export default {
 	// 获取聊天次数状态
 	getChatQuota: (userId) => request(`/chat/quota/${userId}`, 'GET'),
 
-	// 大师解惑（对话）
+	// AI大师解惑（对话）
 	chatAsk: (userId, message, history) => request('/chat/ask', 'POST', { userId, message, history }),
 	
 	// 购买额外对话次数

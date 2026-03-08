@@ -7,12 +7,7 @@
 		<!-- 摇签区域 -->
 		<view class="shake-area" @click="startShake">
 			<view class="cylinder-wrapper" :class="{ shaking: isShaking }">
-				<view class="cylinder-body">
-					<text class="cylinder-text">测算</text>
-				</view>
-				<view class="sticks">
-					<view class="stick" v-for="n in 8" :key="n"></view>
-				</view>
+				<image class="tube-image" src="/static/divination_tube.png" mode="aspectFit"></image>
 			</view>
 			<text class="shake-hint" v-if="!isShaking">点击屏幕或摇动手机</text>
 			<text class="shake-hint" v-else>{{ rollingHint }}</text>
@@ -283,51 +278,12 @@
 		&.shaking {
 			animation: shake 0.5s infinite;
 		}
+	}
 
-		.cylinder-body {
-			width: 100%;
-			height: 100%;
-			background: linear-gradient(135deg, #8B4513, #A0522D);
-			border-radius: 15px 15px 60px 60px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			box-shadow: 0 15px 30px rgba(0,0,0,0.4);
-			border: 6px solid #FFD700;
-			position: relative;
-			z-index: 2;
-			
-			.cylinder-text {
-				font-size: 48px;
-				color: #FFD700;
-				font-weight: bold;
-				writing-mode: vertical-rl;
-				letter-spacing: 12px;
-				font-family: "SimSun", serif;
-			}
-		}
-
-		.sticks {
-			position: absolute;
-			top: -30px;
-			left: 30px;
-			right: 30px;
-			height: 60px;
-			z-index: 1;
-			display: flex;
-			justify-content: space-around;
-			
-			.stick {
-				width: 8px;
-				height: 70px;
-				background-color: #DEB887;
-				border-radius: 4px;
-				transform-origin: bottom center;
-				
-				&:nth-child(odd) { transform: rotate(-10deg); height: 60px; }
-				&:nth-child(even) { transform: rotate(10deg); }
-			}
-		}
+	.tube-image {
+		width: 100%;
+		height: 100%;
+		display: block;
 	}
 
 	@keyframes shake {

@@ -70,7 +70,7 @@
 		{
 			"path": "pages/chat/chat",
 			"style": {
-				"navigationBarTitleText": "大师解惑",
+				"navigationBarTitleText": "AI大师解惑",
 				"enablePullDownRefresh": false
 			}
 		},
